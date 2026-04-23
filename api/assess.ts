@@ -1,4 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { SURVEY_QUESTIONS } from '../constants';
 import type { Answers, Question } from '../types';
 
@@ -56,41 +55,75 @@ Provide a numbered list of 3-5 concrete, prioritized steps they can take to impr
 
 Keep the tone professional, helpful, and encouraging. The goal is to empower them to take the next steps in their AI journey.`;
 
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  const encoder = new TextEncoder();
+  try {
+    const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': process.env.ANTHROPIC_API_KEY ?? '',
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'claude-opus-4-7',
+        max_tokens: 2048,
+        stream: true,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      try {
-        const messageStream = client.messages.stream({
-          model: 'claude-opus-4-7',
-          max_tokens: 2048,
-          messages: [{ role: 'user', content: prompt }],
-        });
+    if (!anthropicRes.ok) {
+      const errText = await anthropicRes.text();
+      console.error('Anthropic API error:', errText);
+      return new Response(JSON.stringify({ error: 'AI service error' }), {
+        status: 502,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
-        for await (const chunk of messageStream) {
-          if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({ text: chunk.delta.text })}\n\n`)
-            );
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
+
+    const transformStream = new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        const text = decoder.decode(chunk, { stream: true });
+        const lines = text.split('\n');
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const data = line.slice(6).trim();
+          if (data === '[DONE]') {
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+            return;
           }
+          try {
+            const parsed = JSON.parse(data);
+            if (
+              parsed.type === 'content_block_delta' &&
+              parsed.delta?.type === 'text_delta' &&
+              parsed.delta?.text
+            ) {
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify({ text: parsed.delta.text })}\n\n`)
+              );
+            }
+          } catch {}
         }
-
+      },
+      flush(controller) {
         controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-      } catch (error) {
-        controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify({ error: 'Failed to generate assessment' })}\n\n`)
-        );
-      } finally {
-        controller.close();
-      }
-    },
-  });
+      },
+    });
 
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-    },
-  });
+    return new Response(anthropicRes.body!.pipeThrough(transformStream), {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+      },
+    });
+  } catch (error) {
+    console.error('Edge function error:', error);
+    return new Response(JSON.stringify({ error: 'Internal server error' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 }
