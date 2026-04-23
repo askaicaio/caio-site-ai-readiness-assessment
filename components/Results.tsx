@@ -109,8 +109,10 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
       setIsLoading(true);
       setError('');
       try {
-        const result = await getAIAssessment(score, maxScore, answers);
-        setFullReport(result);
+        await getAIAssessment(score, maxScore, answers, (text) => {
+          setFullReport(text);
+          setIsLoading(false);
+        });
       } catch (e: any) {
         setError(e.message || "An unexpected error occurred while generating your report.");
       } finally {

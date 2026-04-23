@@ -1,31 +1,30 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
-
-export const config = { maxDuration: 60 };
 import { SURVEY_QUESTIONS } from '../constants';
 import type { Answers, Question } from '../types';
 
-const client = new Anthropic();
+export const runtime = 'edge';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: Request): Promise<Response> {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return new Response('Method not allowed', { status: 405 });
   }
 
-  const { score, maxScore, answers } = req.body as {
-    score: number;
-    maxScore: number;
-    answers: Answers;
-  };
+  let score: number, maxScore: number, answers: Answers;
+  try {
+    ({ score, maxScore, answers } = await req.json());
+  } catch {
+    return new Response(JSON.stringify({ error: 'Invalid request body' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 
   const relevantAnswers: { question: Question; answer: string }[] = [];
   for (const question of SURVEY_QUESTIONS) {
     if (question.type === 'radio' && answers[question.id]) {
       const answerText = answers[question.id];
       const option = question.options?.find(o => o.text === answerText);
-      if (option) {
-        relevantAnswers.push({ question, answer: answerText });
-      }
+      if (option) relevantAnswers.push({ question, answer: answerText });
     }
   }
 
@@ -57,17 +56,41 @@ Provide a numbered list of 3-5 concrete, prioritized steps they can take to impr
 
 Keep the tone professional, helpful, and encouraging. The goal is to empower them to take the next steps in their AI journey.`;
 
-  try {
-    const message = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
-      messages: [{ role: 'user', content: prompt }],
-    });
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const encoder = new TextEncoder();
 
-    const result = message.content[0].type === 'text' ? message.content[0].text : '';
-    return res.status(200).json({ result });
-  } catch (error) {
-    console.error('Error generating AI assessment:', error);
-    return res.status(500).json({ error: 'Failed to generate assessment. Please try again later.' });
-  }
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        const messageStream = client.messages.stream({
+          model: 'claude-opus-4-7',
+          max_tokens: 2048,
+          messages: [{ role: 'user', content: prompt }],
+        });
+
+        for await (const chunk of messageStream) {
+          if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ text: chunk.delta.text })}\n\n`)
+            );
+          }
+        }
+
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+      } catch (error) {
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify({ error: 'Failed to generate assessment' })}\n\n`)
+        );
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+    },
+  });
 }
