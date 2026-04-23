@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getAIAssessment } from '../services/geminiService';
+import { getAIAssessment } from '../services/claudeService';
 import { Answers } from '../types';
 
 interface ResultsProps {
