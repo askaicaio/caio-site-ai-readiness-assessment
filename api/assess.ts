@@ -1,5 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
+
+export const config = { maxDuration: 60 };
 import { SURVEY_QUESTIONS } from '../constants';
 import type { Answers, Question } from '../types';
 
@@ -57,8 +59,8 @@ Keep the tone professional, helpful, and encouraging. The goal is to empower the
 
   try {
     const message = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1500,
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1024,
       messages: [{ role: 'user', content: prompt }],
     });
 
