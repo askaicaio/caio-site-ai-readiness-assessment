@@ -99,7 +99,6 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
   const [error, setError] = useState<string>('');
   const [showForm, setShowForm] = useState<boolean>(false);
   const [reportUnlocked, setReportUnlocked] = useState<boolean>(false);
-  const [testStatus, setTestStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -109,10 +108,11 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
       setIsLoading(true);
       setError('');
       try {
-        await getAIAssessment(score, maxScore, answers, (text) => {
+        const result = await getAIAssessment(score, maxScore, answers, (text) => {
           setFullReport(text);
           setIsLoading(false);
         });
+        setFullReport(result);
       } catch (e: any) {
         setError(e.message || "An unexpected error occurred while generating your report.");
       } finally {
@@ -167,39 +167,6 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
     }
   };
 
-  const handleTestWebhook = async () => {
-    setTestStatus('loading');
-    try {
-      const testData = {
-        name: "Test Webhook",
-        email: "test@example.com",
-        customFields: {
-          aiReadinessScore: Math.round(maxScore / 2),
-          maxScore: maxScore,
-          assessmentDate: new Date().toISOString(),
-          scorePercentage: 50,
-        },
-        tags: ['AI Assessment Completed', 'TEST_DATA']
-      };
-
-      const response = await fetch('https://services.leadconnectorhq.com/hooks/FgaFLGYrbGZSBVprTkhR/webhook-trigger/elWtYyahvdVemgjf2SBn', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(testData),
-      });
-
-      if (response.ok) {
-        setTestStatus('success');
-      } else {
-        setTestStatus('error');
-      }
-    } catch (error) {
-      console.error('❌ Error sending test webhook:', error);
-      setTestStatus('error');
-    }
-  };
   
   const getTeaser = (report: string) => {
       if (!report) return '';
@@ -285,19 +252,6 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
                         </div>
                     </form>
 
-                    <div className="text-center my-4 border-t border-gray-700 py-4 max-w-md mx-auto mt-8">
-                        <p className="text-sm text-gray-400 mb-2">Need to verify your webhook? Send a test request.</p>
-                        <button
-                            type="button"
-                            onClick={handleTestWebhook}
-                            disabled={testStatus === 'loading'}
-                            className="px-4 py-2 bg-gray-700 text-gray-300 rounded-md hover:bg-gray-600 disabled:opacity-50 disabled:cursor-wait transition text-sm font-semibold"
-                        >
-                            {testStatus === 'loading' ? 'Sending...' : 'Send Test Webhook'}
-                        </button>
-                        {testStatus === 'success' && <p className="text-green-400 text-sm mt-2 animate-fade-in">✅ Test webhook sent successfully!</p>}
-                        {testStatus === 'error' && <p className="text-red-400 text-sm mt-2 animate-fade-in">❌ Failed to send test webhook. Check console for details.</p>}
-                    </div>
                 </div>
             )}
         </>
