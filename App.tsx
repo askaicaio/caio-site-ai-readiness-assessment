@@ -61,6 +61,7 @@ const App: React.FC = () => {
 
   const renderHeader = () => (
     <div className="text-center mb-8 max-w-3xl mx-auto">
+      <img src="/logo.png" alt="ChiefAIOfficer.com in partnership with Scaling Up" className="mx-auto mb-6 h-12 w-auto" />
       <h1 className="text-4xl sm:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-500">
         Practical AI Assessment
       </h1>
