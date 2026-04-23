@@ -1,30 +1,23 @@
-import { SURVEY_QUESTIONS } from '../constants';
-import type { Answers, Question } from '../types';
+export const config = { runtime: 'edge' };
 
-export const runtime = 'edge';
+interface AnswerItem {
+  questionText: string;
+  answer: string;
+}
 
 export default async function handler(req: Request): Promise<Response> {
   if (req.method !== 'POST') {
     return new Response('Method not allowed', { status: 405 });
   }
 
-  let score: number, maxScore: number, answers: Answers;
+  let score: number, maxScore: number, relevantAnswers: AnswerItem[];
   try {
-    ({ score, maxScore, answers } = await req.json());
+    ({ score, maxScore, relevantAnswers } = await req.json());
   } catch {
     return new Response(JSON.stringify({ error: 'Invalid request body' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' },
     });
-  }
-
-  const relevantAnswers: { question: Question; answer: string }[] = [];
-  for (const question of SURVEY_QUESTIONS) {
-    if (question.type === 'radio' && answers[question.id]) {
-      const answerText = answers[question.id];
-      const option = question.options?.find(o => o.text === answerText);
-      if (option) relevantAnswers.push({ question, answer: answerText });
-    }
   }
 
   const prompt = `You are an expert AI strategy consultant and certified Chief AI Officer providing feedback on an "AI Readiness Assessment".
@@ -33,7 +26,7 @@ A user has completed a survey and received a score of ${score} out of a possible
 
 Here are their answers to the key questions:
 
-${relevantAnswers.map(item => `- ${item.question.text}\n  - Answer: ${item.answer}`).join('\n')}
+${relevantAnswers.map(item => `- ${item.questionText}\n  - Answer: ${item.answer}`).join('\n')}
 
 Based on their score and specific answers, provide a comprehensive, insightful, and actionable assessment of their organization's AI readiness. Structure your feedback in Markdown format with the following sections:
 

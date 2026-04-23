@@ -1,4 +1,5 @@
 import { Answers } from '../types';
+import { SURVEY_QUESTIONS } from '../constants';
 
 export async function getAIAssessment(
   score: number,
@@ -6,10 +7,18 @@ export async function getAIAssessment(
   answers: Answers,
   onChunk?: (text: string) => void
 ): Promise<string> {
+  const relevantAnswers = SURVEY_QUESTIONS
+    .filter(q => q.type === 'radio' && answers[q.id])
+    .flatMap(q => {
+      const answerText = answers[q.id];
+      const option = q.options?.find(o => o.text === answerText);
+      return option ? [{ questionText: q.text, answer: answerText }] : [];
+    });
+
   const response = await fetch('/api/assess', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ score, maxScore, answers }),
+    body: JSON.stringify({ score, maxScore, relevantAnswers }),
   });
 
   if (!response.ok) throw new Error('Failed to generate assessment. Please try again.');
