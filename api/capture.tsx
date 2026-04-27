@@ -178,7 +178,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const date     = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   const sections = parseReport(fullReport || '');
 
-  // Generate PDF → upload to Blob
+  // 1. Generate PDF first — we need the URL before calling MailerLite
   let pdfUrl = '';
   try {
     const buffer = await renderToBuffer(
@@ -194,12 +194,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.error('PDF/Blob error:', err);
   }
 
-  // MailerLite + GHL (parallel, non-blocking)
+  // 2. MailerLite (with pdf_url field) + GHL in parallel
   await Promise.allSettled([
     fetch('https://connect.mailerlite.com/api/subscribers', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${process.env.MAILERLITE_API_KEY}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ email, fields: { name }, groups: [MAILERLITE_GROUP_ID], status: 'active' }),
+      body: JSON.stringify({
+        email,
+        fields: { name, pdf_url: pdfUrl },
+        groups: [MAILERLITE_GROUP_ID],
+        status: 'active',
+      }),
     }),
     fetch(GHL_WEBHOOK_URL, {
       method: 'POST',
