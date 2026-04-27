@@ -50,20 +50,22 @@ const s = StyleSheet.create({
   coverPrepared:   { color: '#e0e7ff', fontSize: 12, marginBottom: 4 },
   coverSubMeta:    { color: '#a5b4fc', fontSize: 10, marginBottom: 4 },
   coverDate:       { color: '#6366f1', fontSize: 9.5, marginBottom: 40 },
-  coverScoreBox:   { backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 10, padding: '22 28', marginBottom: 40 },
-  coverScoreRow:   { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 18 },
-  coverScoreNum:   { fontSize: 60, fontFamily: 'Helvetica-Bold', color: '#ffffff', lineHeight: 1 },
-  coverScoreSlash: { fontSize: 28, color: '#6366f1', marginBottom: 10, marginLeft: 3 },
-  coverScoreMeta:  { marginLeft: 24, paddingBottom: 4 },
-  coverScoreLabel: { fontSize: 7.5, color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: 0.5 },
-  coverScorePct:   { fontSize: 30, fontFamily: 'Helvetica-Bold', color: '#ffffff', marginTop: 4 },
-  coverTierRow:    { flexDirection: 'row', alignItems: 'center', marginTop: 5, gap: 8 },
-  coverTierPill:   { borderRadius: 20, paddingTop: 4, paddingBottom: 4, paddingLeft: 12, paddingRight: 12 },
+  coverScoreBox:   { backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 10, padding: '26 32', marginBottom: 40 },
+  coverScoreRow:   { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 22 },
+  coverScoreNum:   { fontSize: 64, fontFamily: 'Helvetica-Bold', color: '#ffffff', lineHeight: 1 },
+  coverScoreSlash: { fontSize: 28, color: '#6366f1', marginBottom: 10, marginLeft: 4 },
+  coverScoreMeta:  { marginLeft: 28, paddingBottom: 6, flex: 1 },
+  coverScoreLabel: { fontSize: 7.5, color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: 0.8 },
+  coverScorePct:   { fontSize: 32, fontFamily: 'Helvetica-Bold', color: '#ffffff', marginTop: 4, marginBottom: 8 },
+  coverTierPill:   { borderRadius: 20, paddingTop: 5, paddingBottom: 5, paddingLeft: 14, paddingRight: 14, alignSelf: 'flex-start' },
   coverTierText:   { color: '#ffffff', fontSize: 11, fontFamily: 'Helvetica-Bold' },
   coverBarTrack:   { height: 6, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 3 },
   coverBarFill:    { height: 6, borderRadius: 3 },
-  coverBarRow:     { flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 },
-  coverBarLabel:   { fontSize: 7, color: '#6366f1' },
+  coverBarTickRow: { position: 'relative', height: 5, marginTop: 0 },
+  coverBarTick:    { position: 'absolute', width: 1, height: 5, backgroundColor: 'rgba(255,255,255,0.35)' },
+  coverBarLabelRow:{ position: 'relative', height: 22, marginTop: 4 },
+  coverBarPct:     { fontSize: 6.5, color: '#a5b4fc', fontFamily: 'Helvetica-Bold' },
+  coverBarTierLbl: { fontSize: 7.5, color: '#e0e7ff', marginTop: 1 },
   coverFooterRow:  { flexDirection: 'row', justifyContent: 'space-between', borderTop: '1 solid #312e81', paddingTop: 14 },
   coverFooterText: { color: '#4338ca', fontSize: 8.5 },
 
@@ -100,8 +102,11 @@ const s = StyleSheet.create({
   scoreTierLabel:  { fontSize: 9, color: MUTED, marginTop: 4 },
   barTrack:        { height: 7, backgroundColor: '#e5e7eb', borderRadius: 4 },
   barFill:         { height: 7, borderRadius: 4 },
-  barCaption:      { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
-  barCaptionText:  { fontSize: 6.5, color: MUTED },
+  barTickRow:      { position: 'relative', height: 5, marginTop: 0 },
+  barTick:         { position: 'absolute', width: 1, height: 5, backgroundColor: '#9ca3af' },
+  barLabelRow:     { position: 'relative', height: 22, marginTop: 4 },
+  barPct:          { fontSize: 6.5, color: MUTED, fontFamily: 'Helvetica-Bold' },
+  barTierLbl:      { fontSize: 7.5, color: NAVY, marginTop: 1 },
 
   // Sections — McKinsey style (numbered, left accent, no card box)
   section:         { marginBottom: 22 },
@@ -212,11 +217,11 @@ function buildPdf({ name, score, maxScore, tier, tierColor, date, sections, comp
     const blockEls = sec.blocks
       .filter(b => b.text && b.text.trim())
       .map((b, j) => {
-        if (b.type === 'numbered') return e(View as any, { key: j, style: s.listRow },
+        if (b.type === 'numbered') return e(View as any, { key: j, style: s.listRow, wrap: false },
           e(Text as any, { style: [s.listBullet, { color: accent }] }, `${b.num}.`),
           e(Text as any, { style: s.listText }, b.text),
         );
-        if (b.type === 'bullet') return e(View as any, { key: j, style: s.listRow },
+        if (b.type === 'bullet') return e(View as any, { key: j, style: s.listRow, wrap: false },
           e(Text as any, { style: [s.listBullet, { color: accent }] }, '•'),
           e(Text as any, { style: s.listText }, b.text),
         );
@@ -224,10 +229,13 @@ function buildPdf({ name, score, maxScore, tier, tierColor, date, sections, comp
       });
 
     return e(View as any, { key: i, style: s.section },
-      e(Text as any, { style: s.sectionNum }, `${num}  ──  ${sec.title.toUpperCase()}`),
-      e(View as any, { style: s.sectionTitleRow },
-        e(View as any, { style: [s.sectionTitleBar, { backgroundColor: accent }] }),
-        e(Text as any, { style: s.sectionTitleText }, sec.title),
+      // Section header — kept together so the title never orphans at the bottom of a page
+      e(View as any, { wrap: false },
+        e(Text as any, { style: s.sectionNum }, `${num}  /  ${sec.title.toUpperCase()}`),
+        e(View as any, { style: s.sectionTitleRow },
+          e(View as any, { style: [s.sectionTitleBar, { backgroundColor: accent }] }),
+          e(Text as any, { style: s.sectionTitleText }, sec.title),
+        ),
       ),
       e(View as any, { style: s.sectionContent }, ...blockEls),
     );
@@ -239,9 +247,9 @@ function buildPdf({ name, score, maxScore, tier, tierColor, date, sections, comp
     e(Text as any, { style: s.ctaBody },
       "Your report outlines the priorities — but knowing what to do and knowing how to do it are two different things. Book a complimentary AI Strategy Briefing with a fractional Chief AI Officer from ChiefAIOfficer.com and get a clear, actionable path forward for your organisation."
     ),
-    e(Link as any, { src: BOOKING_URL },
+    e(Link as any, { src: BOOKING_URL, style: { textDecoration: 'none' } },
       e(View as any, { style: s.ctaBtn },
-        e(Text as any, { style: s.ctaBtnText }, 'Book Your Free AI Strategy Briefing  →'),
+        e(Text as any, { style: s.ctaBtnText }, 'Book Your Free AI Strategy Briefing'),
       )
     ),
   );
@@ -279,21 +287,39 @@ function buildPdf({ name, score, maxScore, tier, tierColor, date, sections, comp
           e(View as any, { style: s.coverScoreMeta },
             e(Text as any, { style: s.coverScoreLabel }, 'Overall Score'),
             e(Text as any, { style: s.coverScorePct }, `${pct}%`),
-            e(View as any, { style: s.coverTierRow },
-              e(View as any, { style: [s.coverTierPill, { backgroundColor: tierColor }] },
-                e(Text as any, { style: s.coverTierText }, tier),
-              ),
-              e(Text as any, { style: { color: '#a5b4fc', fontSize: 9 } }, 'AI Readiness Tier'),
+            e(View as any, { style: [s.coverTierPill, { backgroundColor: tierColor }] },
+              e(Text as any, { style: s.coverTierText }, tier),
             ),
           ),
         ),
+        // Bar
         e(View as any, { style: s.coverBarTrack },
           e(View as any, { style: [s.coverBarFill, { width: `${pct}%`, backgroundColor: tierColor }] }),
         ),
-        e(View as any, { style: s.coverBarRow },
-          e(Text as any, { style: s.coverBarLabel }, '0%  Explorer'),
-          e(Text as any, { style: s.coverBarLabel }, 'Adopter'),
-          e(Text as any, { style: s.coverBarLabel }, 'Leader  100%'),
+        // Tick marks at 0%, 40%, 75%, 100%
+        e(View as any, { style: s.coverBarTickRow },
+          e(View as any, { style: [s.coverBarTick, { left: 0 }] }),
+          e(View as any, { style: [s.coverBarTick, { left: '40%' }] }),
+          e(View as any, { style: [s.coverBarTick, { left: '75%' }] }),
+          e(View as any, { style: [s.coverBarTick, { right: 0 }] }),
+        ),
+        // Labels anchored to ticks (each tier label sits at the start of its range)
+        e(View as any, { style: s.coverBarLabelRow },
+          e(View as any, { style: { position: 'absolute', left: 0 } },
+            e(Text as any, { style: s.coverBarPct }, '0%'),
+            e(Text as any, { style: s.coverBarTierLbl }, 'Explorer'),
+          ),
+          e(View as any, { style: { position: 'absolute', left: '40%' } },
+            e(Text as any, { style: s.coverBarPct }, '40%'),
+            e(Text as any, { style: s.coverBarTierLbl }, 'Adopter'),
+          ),
+          e(View as any, { style: { position: 'absolute', left: '75%' } },
+            e(Text as any, { style: s.coverBarPct }, '75%'),
+            e(Text as any, { style: s.coverBarTierLbl }, 'Leader'),
+          ),
+          e(View as any, { style: { position: 'absolute', right: 0 } },
+            e(Text as any, { style: [s.coverBarPct, { textAlign: 'right' }] }, '100%'),
+          ),
         ),
       ),
 
@@ -352,10 +378,30 @@ function buildPdf({ name, score, maxScore, tier, tierColor, date, sections, comp
           e(View as any, { style: s.barTrack },
             e(View as any, { style: [s.barFill, { width: `${pct}%`, backgroundColor: tierColor }] }),
           ),
-          e(View as any, { style: s.barCaption },
-            e(Text as any, { style: s.barCaptionText }, '0%'),
-            e(Text as any, { style: s.barCaptionText }, 'Explorer  ·  Adopter  ·  Leader'),
-            e(Text as any, { style: s.barCaptionText }, '100%'),
+          // Tick marks
+          e(View as any, { style: s.barTickRow },
+            e(View as any, { style: [s.barTick, { left: 0 }] }),
+            e(View as any, { style: [s.barTick, { left: '40%' }] }),
+            e(View as any, { style: [s.barTick, { left: '75%' }] }),
+            e(View as any, { style: [s.barTick, { right: 0 }] }),
+          ),
+          // Labels anchored to ticks
+          e(View as any, { style: s.barLabelRow },
+            e(View as any, { style: { position: 'absolute', left: 0 } },
+              e(Text as any, { style: s.barPct }, '0%'),
+              e(Text as any, { style: s.barTierLbl }, 'Explorer'),
+            ),
+            e(View as any, { style: { position: 'absolute', left: '40%' } },
+              e(Text as any, { style: s.barPct }, '40%'),
+              e(Text as any, { style: s.barTierLbl }, 'Adopter'),
+            ),
+            e(View as any, { style: { position: 'absolute', left: '75%' } },
+              e(Text as any, { style: s.barPct }, '75%'),
+              e(Text as any, { style: s.barTierLbl }, 'Leader'),
+            ),
+            e(View as any, { style: { position: 'absolute', right: 0 } },
+              e(Text as any, { style: [s.barPct, { textAlign: 'right' }] }, '100%'),
+            ),
           ),
         ),
 
@@ -381,34 +427,73 @@ async function addToMailerLite(
   email: string, name: string, pdfUrl: string,
   extras: { company?: string; role?: string; industry?: string; companySize?: string }
 ) {
+  const apiKey = process.env.MAILERLITE_API_KEY;
+  console.log('[ML] starting; key present:', !!apiKey, 'key length:', (apiKey || '').length, 'group:', MAILERLITE_GROUP_ID);
+
+  if (!apiKey) {
+    console.error('[ML] ABORT — MAILERLITE_API_KEY env var is missing in Vercel.');
+    return;
+  }
+
   const ML_URL = 'https://connect.mailerlite.com/api/subscribers';
   const headers = {
-    'Authorization': `Bearer ${process.env.MAILERLITE_API_KEY}`,
+    'Authorization': `Bearer ${apiKey}`,
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   };
-  const fields: Record<string, string> = { name, pdf_url: pdfUrl };
+
+  const fields: Record<string, string> = { name };
+  if (pdfUrl)             fields.pdf_url      = pdfUrl;
   if (extras.company)     fields.company      = extras.company;
   if (extras.role)        fields.role         = extras.role;
   if (extras.industry)    fields.industry     = extras.industry;
   if (extras.companySize) fields.company_size = extras.companySize;
 
-  const res = await fetch(ML_URL, {
-    method: 'POST', headers,
-    body: JSON.stringify({ email, fields, groups: [MAILERLITE_GROUP_ID], status: 'active' }),
-  });
-  if (res.ok) { console.log('MailerLite: subscriber created ✓'); return; }
+  const payload = { email, fields, groups: [MAILERLITE_GROUP_ID], status: 'active' };
+  console.log('[ML] POST', ML_URL, 'payload:', JSON.stringify(payload));
 
-  const errText = await res.text();
-  console.error(`MailerLite error (${res.status}):`, errText);
+  let res: Response;
+  try {
+    res = await fetch(ML_URL, { method: 'POST', headers, body: JSON.stringify(payload) });
+  } catch (err) {
+    console.error('[ML] fetch threw:', err);
+    return;
+  }
 
+  const bodyText = await res.text();
+  console.log(`[ML] response ${res.status} ${res.statusText}:`, bodyText.slice(0, 500));
+
+  if (res.ok) {
+    console.log('[ML] ✓ subscriber created with all fields');
+    return;
+  }
+
+  // 422 = validation error (likely a custom field doesn't exist). Retry minimal.
   if (res.status === 422) {
-    const res2 = await fetch(ML_URL, {
-      method: 'POST', headers,
-      body: JSON.stringify({ email, fields: { name }, groups: [MAILERLITE_GROUP_ID], status: 'active' }),
-    });
-    if (res2.ok) console.log('MailerLite: subscriber created (minimal fields).');
-    else console.error('MailerLite retry failed:', res2.status, await res2.text());
+    console.log('[ML] 422 — retrying with name-only fields');
+    const minimal = { email, fields: { name }, groups: [MAILERLITE_GROUP_ID], status: 'active' };
+    const res2 = await fetch(ML_URL, { method: 'POST', headers, body: JSON.stringify(minimal) });
+    const body2 = await res2.text();
+    console.log(`[ML] retry response ${res2.status}:`, body2.slice(0, 500));
+    if (res2.ok) {
+      console.log('[ML] ✓ subscriber created (minimal fields). Some custom fields missing — check MailerLite admin.');
+      return;
+    }
+  }
+
+  // 401/403 = auth issue. Surface clearly.
+  if (res.status === 401 || res.status === 403) {
+    console.error('[ML] AUTH FAILED. Verify MAILERLITE_API_KEY is a valid token from https://dashboard.mailerlite.com/integrations/api');
+  }
+
+  // Any other failure: try without the groups array — at least create the subscriber so we know the key works
+  console.log('[ML] last-ditch retry without groups');
+  const noGroups = { email, fields: { name }, status: 'active' };
+  const res3 = await fetch(ML_URL, { method: 'POST', headers, body: JSON.stringify(noGroups) });
+  const body3 = await res3.text();
+  console.log(`[ML] no-groups response ${res3.status}:`, body3.slice(0, 500));
+  if (res3.ok) {
+    console.error('[ML] subscriber created WITHOUT group — group ID', MAILERLITE_GROUP_ID, 'is likely wrong or inaccessible to this key.');
   }
 }
 
