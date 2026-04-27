@@ -581,9 +581,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const buffer = await renderToBuffer(
       buildPdf({ name, score, maxScore, tier, tierColor, date, sections, company, role, industry, companySize, logoSrc }) as any
     );
-    const slug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-    const { url } = await put(`reports/${Date.now()}-${slug}.pdf`, buffer, {
-      access: 'public', contentType: 'application/pdf',
+    // Branded filename. The blob path gets a random suffix from Vercel for
+    // uniqueness, but Content-Disposition controls what the browser actually
+    // suggests when the user saves the file — that's what we make pretty.
+    const slug = name.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    const titleName = name.trim().replace(/\s+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).replace(/\s+/g, '-').replace(/[^A-Za-z0-9-]/g, '');
+    const isoDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const downloadName = `ChiefAIOfficer-AI-Readiness-Report-${titleName || 'Respondent'}-${isoDate}.pdf`;
+    const { url } = await put(`reports/ai-readiness-report-${slug}-${Date.now()}.pdf`, buffer, {
+      access: 'public',
+      contentType: 'application/pdf',
+      contentDisposition: `inline; filename="${downloadName}"`,
     });
     pdfUrl = url;
     console.log('PDF generated:', pdfUrl);
