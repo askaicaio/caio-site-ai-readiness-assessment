@@ -42,7 +42,8 @@ function getLogoSrc(): string {
 const s = StyleSheet.create({
   // ── Cover page ──────────────────────────────────────────────────────────────
   coverPage:       { backgroundColor: NAVY },
-  coverContent:    { paddingTop: 56, paddingBottom: 40, paddingHorizontal: 60, height: '100%' },
+  coverBgWrap:     { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  coverContent:    { paddingTop: 56, paddingBottom: 40, paddingHorizontal: 60 },
   coverLogo:       { width: 200, marginBottom: 36 },
   coverBrand:      { color: '#ffffff', fontSize: 22, fontFamily: 'Helvetica-Bold' },
   coverPartner:    { color: '#a5b4fc', fontSize: 9.5, marginTop: 4, marginBottom: 36 },
@@ -193,29 +194,31 @@ function buildPdf({ name, score, maxScore, tier, tierColor, date, sections, comp
       ? e(Image as any, { src: logoSrc, style: { width: w } })
       : e(Text as any, { style: { ...s.miniHeaderBrand, fontSize: w < 120 ? 9 : 14 } }, 'ChiefAIOfficer.com');
 
-  // Soft radial-gradient background for the cover (purple/indigo glows)
-  const coverBg = e(Svg as any, {
-    width: 595, height: 842, viewBox: '0 0 595 842',
-    style: { position: 'absolute', top: 0, left: 0 },
-  },
-    e(Defs as any, null,
-      e(RadialGradient as any, { id: 'glowTR', cx: '85%', cy: '12%', r: '55%' },
-        e(Stop as any, { offset: '0%',   stopColor: '#6366f1', stopOpacity: 0.55 }),
-        e(Stop as any, { offset: '60%',  stopColor: '#4338ca', stopOpacity: 0.12 }),
-        e(Stop as any, { offset: '100%', stopColor: '#1e1b4b', stopOpacity: 0 }),
+  // Soft radial-gradient background for the cover (purple/indigo glows).
+  // Wrapped in a position:absolute View so the page-flow layout engine doesn't
+  // treat the SVG's intrinsic 595×842 box as a flow block (which was pushing
+  // the cover content onto a second page).
+  const coverBg = e(View as any, { style: s.coverBgWrap },
+    e(Svg as any, { width: 595, height: 842, viewBox: '0 0 595 842' },
+      e(Defs as any, null,
+        e(RadialGradient as any, { id: 'glowTR', cx: '85%', cy: '12%', r: '55%' },
+          e(Stop as any, { offset: '0%',   stopColor: '#6366f1', stopOpacity: 0.55 }),
+          e(Stop as any, { offset: '60%',  stopColor: '#4338ca', stopOpacity: 0.12 }),
+          e(Stop as any, { offset: '100%', stopColor: '#1e1b4b', stopOpacity: 0 }),
+        ),
+        e(RadialGradient as any, { id: 'glowBL', cx: '12%', cy: '92%', r: '58%' },
+          e(Stop as any, { offset: '0%',   stopColor: '#4338ca', stopOpacity: 0.45 }),
+          e(Stop as any, { offset: '100%', stopColor: '#1e1b4b', stopOpacity: 0 }),
+        ),
+        e(RadialGradient as any, { id: 'glowMid', cx: '50%', cy: '50%', r: '70%' },
+          e(Stop as any, { offset: '0%',   stopColor: '#312e81', stopOpacity: 0.25 }),
+          e(Stop as any, { offset: '100%', stopColor: '#1e1b4b', stopOpacity: 0 }),
+        ),
       ),
-      e(RadialGradient as any, { id: 'glowBL', cx: '12%', cy: '92%', r: '58%' },
-        e(Stop as any, { offset: '0%',   stopColor: '#4338ca', stopOpacity: 0.45 }),
-        e(Stop as any, { offset: '100%', stopColor: '#1e1b4b', stopOpacity: 0 }),
-      ),
-      e(RadialGradient as any, { id: 'glowMid', cx: '50%', cy: '50%', r: '70%' },
-        e(Stop as any, { offset: '0%',   stopColor: '#312e81', stopOpacity: 0.25 }),
-        e(Stop as any, { offset: '100%', stopColor: '#1e1b4b', stopOpacity: 0 }),
-      ),
+      e(Rect as any, { x: 0, y: 0, width: 595, height: 842, fill: 'url(#glowMid)' }),
+      e(Rect as any, { x: 0, y: 0, width: 595, height: 842, fill: 'url(#glowTR)' }),
+      e(Rect as any, { x: 0, y: 0, width: 595, height: 842, fill: 'url(#glowBL)' }),
     ),
-    e(Rect as any, { x: 0, y: 0, width: 595, height: 842, fill: 'url(#glowMid)' }),
-    e(Rect as any, { x: 0, y: 0, width: 595, height: 842, fill: 'url(#glowTR)' }),
-    e(Rect as any, { x: 0, y: 0, width: 595, height: 842, fill: 'url(#glowBL)' }),
   );
 
   // ── Context meta chips (row 2) ────────────────────────────────────────────
