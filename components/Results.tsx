@@ -128,41 +128,15 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
 
     setIsSubmitting(true);
     try {
-      // Prepare data for GHL
-      const contactData = {
-        name,
-        email,
-        // Custom fields for GHL
-        customFields: {
-          aiReadinessScore: score,
-          maxScore: maxScore,
-          assessmentDate: new Date().toISOString(),
-          scorePercentage: Math.round((score / maxScore) * 100)
-        },
-        // Optional: Add tags in GHL
-        tags: ['AI Assessment Completed']
-      };
-
-      // Send to GHL webhook
-      const response = await fetch('https://services.leadconnectorhq.com/hooks/FgaFLGYrbGZSBVprTkhR/webhook-trigger/elWtYyahvdVemgjf2SBn', {
+      await fetch('/api/capture', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(contactData),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, score, maxScore }),
       });
-
-      if (response.ok) {
-        console.log('✅ Contact added to GHL successfully!');
-        setReportUnlocked(true);
-      } else {
-        console.error('⚠️ Failed to add contact to GHL, but unlocking report anyway');
-        setReportUnlocked(true);
-      }
     } catch (error) {
-      console.error('❌ Error sending to GHL:', error);
-      setReportUnlocked(true);
+      console.error('Capture error:', error);
     } finally {
+      setReportUnlocked(true);
       setIsSubmitting(false);
     }
   };
@@ -184,9 +158,15 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
       }
       if (reportUnlocked) {
            return (
-            <div className="mt-8 text-left bg-gray-900/50 p-6 rounded-lg border border-gray-700">
-                <h3 className="text-2xl font-bold text-white mb-4">Your Personalized Feedback</h3>
-                <ReportRenderer markdown={fullReport} />
+            <div className="mt-8 space-y-4">
+                <div className="flex items-center gap-3 bg-green-900/30 border border-green-700 rounded-lg px-4 py-3 animate-fade-in">
+                    <span className="text-green-400 text-lg">✓</span>
+                    <p className="text-green-300 text-sm">Thanks, <strong>{name}</strong>! Your report is below and a copy is on its way to <strong>{email}</strong>.</p>
+                </div>
+                <div className="text-left bg-gray-900/50 p-6 rounded-lg border border-gray-700">
+                    <h3 className="text-2xl font-bold text-white mb-4">Your Personalized Feedback</h3>
+                    <ReportRenderer markdown={fullReport} />
+                </div>
             </div>
            );
       }
