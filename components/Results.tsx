@@ -204,7 +204,7 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
 
   const handleUnlockReport = async (evt: React.FormEvent) => {
     evt.preventDefault();
-    if (!name || !email || !company || !role) return;
+    if (!name || !email || !company) return;
 
     setPhase('generating');
     setError('');
@@ -333,8 +333,8 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
           {/* Row 3: Role + Industry */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label htmlFor="role" className="block text-xs text-gray-400 mb-1">Your Role <span className="text-indigo-400">*</span></label>
-              <select id="role" value={role} onChange={e => setRole(e.target.value)} required className={selectCls}>
+              <label htmlFor="role" className="block text-xs text-gray-400 mb-1">Your Role</label>
+              <select id="role" value={role} onChange={e => setRole(e.target.value)} className={selectCls}>
                 <option value="">Select your role…</option>
                 {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
@@ -418,7 +418,7 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
           <div className="pt-2">
             <button
               type="submit"
-              disabled={!name || !email || !company || !role}
+              disabled={!name || !email || !company}
               className="w-full py-3 px-6 bg-indigo-600 text-white font-semibold rounded-md hover:bg-indigo-500 disabled:bg-indigo-800 disabled:text-gray-400 disabled:cursor-not-allowed transition shadow-lg shadow-indigo-600/20"
             >
               Generate My Personalised Report
