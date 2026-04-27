@@ -8,42 +8,73 @@ interface AnswerItem {
   answer: string;
 }
 
+interface ReportContext {
+  company?: string;
+  role?: string;
+  industry?: string;
+  companySize?: string;
+  primaryGoal?: string;
+  biggestChallenge?: string;
+  aiTools?: string;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).end();
 
-  const { score, maxScore, relevantAnswers } = req.body as {
+  const { score, maxScore, relevantAnswers, context = {} } = req.body as {
     score: number;
     maxScore: number;
     relevantAnswers: AnswerItem[];
+    context?: ReportContext;
   };
 
-  const prompt = `You are an expert AI strategy consultant and certified Chief AI Officer providing feedback on an "AI Readiness Assessment".
+  // Build contextual description for the prompt
+  const ctx = context as ReportContext;
+  const contextLines = [
+    ctx.company     && `- Organisation: ${ctx.company}${ctx.companySize ? ` (${ctx.companySize})` : ''}`,
+    ctx.role        && `- Respondent's Role: ${ctx.role}`,
+    ctx.industry    && `- Industry: ${ctx.industry}`,
+    ctx.primaryGoal && `- Primary AI Goal: ${ctx.primaryGoal}`,
+    ctx.biggestChallenge && `- Biggest Current Challenge: ${ctx.biggestChallenge}`,
+    ctx.aiTools     && `- AI Tools Currently in Use: ${ctx.aiTools}`,
+  ].filter(Boolean).join('\n');
 
-A user has completed a survey and received a score of ${score} out of a possible ${maxScore}.
+  const contextBlock = contextLines
+    ? `\nRESPONDENT CONTEXT — use this to make every recommendation specific and relevant:\n${contextLines}\n\nImportant: tailor your language, examples, and recommendations directly to their role, industry, company size, goals, and challenges. Avoid generic advice — this person should feel the report was written specifically for them.\n`
+    : '';
 
-Here are their answers to the key questions:
+  const prompt = `You are an expert AI strategy consultant and certified Chief AI Officer providing a high-value assessment report.
+
+A respondent has completed an AI Readiness Assessment and scored ${score} out of ${maxScore}.
+${contextBlock}
+Here are their answers to the key assessment questions:
 
 ${relevantAnswers.map(item => `- ${item.questionText}\n  - Answer: ${item.answer}`).join('\n')}
 
-Based on their score and specific answers, provide a comprehensive, insightful, and actionable assessment of their organization's AI readiness. Structure your feedback in Markdown format with the following sections:
+Provide a comprehensive, insightful, and actionable assessment. Structure your response in Markdown with these exact sections:
 
 ### Overall Assessment
 
-Start with a brief, encouraging summary of their current AI readiness level based on their score (e.g., "Explorer," "Adopter," "Leader"). This section should be a single, concise paragraph.
+A single, concise paragraph summarising their AI readiness tier (Explorer, Adopter, or Leader) based on their score. Be specific about what this tier means for an organisation like theirs. Make it feel personalised to their context — mention their role and industry if available.
 
 ### Key Strengths
 
-Identify 2-3 areas where they are doing well based on their highest-scoring answers. Be specific.
+2–3 specific strengths based on their highest-scoring answers. Cite their actual answers. Explain why each strength matters competitively.
 
 ### Areas for Improvement
 
-Identify the 2-3 most critical areas for improvement based on their lowest-scoring answers. For each area, explain the risk or missed opportunity.
+2–3 critical gaps based on their lowest-scoring answers. For each, explain the specific risk or missed opportunity — make it tangible and urgent, not generic.
 
 ### Actionable Recommendations
 
-Provide a numbered list of 3-5 concrete, prioritized steps they can take to improve their AI readiness. Link each recommendation back to one of their specific answers. For example, if they have no AI policy, a recommendation could be to start drafting one. Your recommendations should suggest they engage with ChiefAIOfficer.com to provide fractional Chief AI Officer (CAIO) services and lead the AI transformation for the company.
+A numbered list of 3–5 concrete, prioritised steps. Each recommendation should:
+- Reference a specific answer they gave
+- Be realistic for an organisation of their size and industry
+- Include a suggested timeframe or first action
 
-Keep the tone professional, helpful, and encouraging. The goal is to empower them to take the next steps in their AI journey.`;
+The final recommendation should suggest engaging ChiefAIOfficer.com for fractional Chief AI Officer services to lead their AI transformation. Frame it as the strategic accelerator — not a sales pitch.
+
+Tone: authoritative, direct, and genuinely helpful. Write for a senior decision-maker. No padding or vague statements.`;
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');

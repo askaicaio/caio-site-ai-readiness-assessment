@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { getAIAssessment } from '../services/claudeService';
 import { Answers } from '../types';
 
@@ -40,16 +40,58 @@ const COMPANY_SIZES = [
   '1,000+ employees',
 ];
 
+const PRIMARY_GOALS = [
+  'Cut costs and increase efficiency',
+  'Increase team productivity',
+  'Build AI-powered products or services',
+  'Stay ahead of competitors',
+  'Comply with AI regulations',
+  'Improve customer experience',
+  'Other',
+];
+
+const BIGGEST_CHALLENGES = [
+  'Not sure where to start',
+  'Upskilling our team',
+  'AI governance & policy',
+  'Justifying budget / proving ROI',
+  'Integrating AI with existing systems',
+  'Getting executive buy-in',
+  'Data quality & readiness',
+  'Other',
+];
+
+// ─── Tier config ──────────────────────────────────────────────────────────────
+function getTierConfig(percentage: number) {
+  if (percentage > 75) return {
+    tier: 'Leader',
+    color: 'text-green-400',
+    stroke: '#4ade80',
+    badge: 'bg-green-900/50 border-green-600 text-green-300',
+    description: 'Your organisation is operating at the frontier of AI adoption. You have strong foundations, active use cases, and strategic intent. The focus now is on scaling, governing, and compounding your advantage — before competitors close the gap.',
+  };
+  if (percentage > 40) return {
+    tier: 'Adopter',
+    color: 'text-blue-400',
+    stroke: '#60a5fa',
+    badge: 'bg-blue-900/50 border-blue-600 text-blue-300',
+    description: 'You\'re making meaningful progress with AI but there are critical gaps holding back real business impact. The difference between an Adopter and a Leader is strategy, governance, and execution — all of which can be addressed with the right roadmap.',
+  };
+  return {
+    tier: 'Explorer',
+    color: 'text-yellow-400',
+    stroke: '#facc15',
+    badge: 'bg-yellow-900/50 border-yellow-600 text-yellow-300',
+    description: 'Your organisation is at the starting line of its AI journey. This is actually an advantage: you can avoid the costly mistakes early adopters made and build AI into your strategy the right way from the ground up. The time to act is now.',
+  };
+}
+
 // ─── Score gauge ──────────────────────────────────────────────────────────────
 const ScoreGauge: React.FC<{ score: number; maxScore: number }> = ({ score, maxScore }) => {
   const percentage = maxScore > 0 ? (score / maxScore) * 100 : 0;
   const circumference = 2 * Math.PI * 55;
   const strokeDashoffset = circumference - (percentage / 100) * circumference;
-
-  let tier = 'Explorer';
-  let color = 'text-yellow-400';
-  if (percentage > 75) { tier = 'Leader';  color = 'text-green-400'; }
-  else if (percentage > 40) { tier = 'Adopter'; color = 'text-blue-400'; }
+  const { tier, color, stroke } = getTierConfig(percentage);
 
   return (
     <div className="flex flex-col items-center justify-center">
@@ -58,14 +100,13 @@ const ScoreGauge: React.FC<{ score: number; maxScore: number }> = ({ score, maxS
           <circle cx="60" cy="60" r="55" strokeWidth="10" className="text-gray-700" stroke="currentColor" fill="transparent" />
           <circle
             cx="60" cy="60" r="55" strokeWidth="10"
-            className={`${color} transition-all duration-1000 ease-out`}
-            stroke="currentColor" fill="transparent"
+            stroke={stroke} fill="transparent"
             strokeDasharray={circumference}
             strokeDashoffset={strokeDashoffset}
             strokeLinecap="round"
+            style={{ transition: 'stroke-dashoffset 1s ease-out' }}
           />
         </svg>
-        {/* Centered overlay — translate approach is more reliable than inset+flex */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
           <span className="text-4xl font-extrabold text-white leading-none">{score}</span>
           <span className="text-sm text-gray-400 mt-1 leading-none">out of {maxScore}</span>
@@ -77,14 +118,7 @@ const ScoreGauge: React.FC<{ score: number; maxScore: number }> = ({ score, maxS
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const LoadingSpinner: React.FC<{ text?: string }> = ({ text = 'Generating your analysis…' }) => (
-  <div className="flex flex-col justify-center items-center p-8 text-center">
-    <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-indigo-500 mb-4" />
-    <p className="text-gray-300">{text}</p>
-  </div>
-);
-
-const inputCls = 'block w-full bg-gray-800 border border-gray-600 rounded-md p-3 text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition';
+const inputCls = 'block w-full bg-gray-800 border border-gray-600 rounded-md p-3 text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition placeholder-gray-500';
 const selectCls = `${inputCls} appearance-none`;
 
 const ReportRenderer: React.FC<{ markdown: string }> = ({ markdown }) => {
@@ -117,14 +151,32 @@ const ReportRenderer: React.FC<{ markdown: string }> = ({ markdown }) => {
   );
 };
 
+// ─── Streaming progress indicator ────────────────────────────────────────────
+const GeneratingIndicator: React.FC<{ streamedText: string }> = ({ streamedText }) => (
+  <div className="mt-8 space-y-6 animate-fade-in">
+    <div className="flex items-center gap-3 bg-indigo-900/30 border border-indigo-700 rounded-lg px-4 py-3">
+      <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-indigo-400 flex-shrink-0" />
+      <p className="text-indigo-300 text-sm font-medium">
+        {streamedText ? 'Crafting your personalised assessment…' : 'Analysing your responses…'}
+      </p>
+    </div>
+    {streamedText && (
+      <div className="text-left bg-gray-900/50 p-6 rounded-lg border border-gray-700">
+        <ReportRenderer markdown={streamedText} />
+        <span className="inline-block w-2 h-4 bg-indigo-400 animate-pulse ml-1 align-middle" />
+      </div>
+    )}
+  </div>
+);
+
 // ─── Main component ───────────────────────────────────────────────────────────
+type Phase = 'form' | 'generating' | 'complete';
+
 export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRestart }) => {
-  const [fullReport, setFullReport]       = useState('');
-  const [isLoading, setIsLoading]         = useState(true);
-  const [error, setError]                 = useState('');
-  const [showForm, setShowForm]           = useState(false);
-  const [reportUnlocked, setReportUnlocked] = useState(false);
+  const [phase, setPhase] = useState<Phase>('form');
+  const [streamedReport, setStreamedReport] = useState('');
   const [pdfUrl, setPdfUrl]               = useState('');
+  const [error, setError]                 = useState('');
 
   // Contact fields
   const [name, setName]                   = useState('');
@@ -133,31 +185,37 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
   const [role, setRole]                   = useState('');
   const [industry, setIndustry]           = useState('');
   const [companySize, setCompanySize]     = useState('');
-  const [isSubmitting, setIsSubmitting]   = useState(false);
 
-  useEffect(() => {
-    const fetchAssessment = async () => {
-      setIsLoading(true);
-      setError('');
-      try {
-        const result = await getAIAssessment(score, maxScore, answers, (text) => {
-          setFullReport(text);
-          setIsLoading(false);
-        });
-        setFullReport(result);
-      } catch (e: any) {
-        setError(e.message || 'An unexpected error occurred while generating your report.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchAssessment();
-  }, [score, maxScore, answers]);
+  // Personalisation fields
+  const [primaryGoal, setPrimaryGoal]         = useState('');
+  const [biggestChallenge, setBiggestChallenge] = useState('');
+  const [aiTools, setAiTools]                 = useState('');
+
+  const percentage = maxScore > 0 ? (score / maxScore) * 100 : 0;
+  const { tier, badge, description } = getTierConfig(percentage);
 
   const handleUnlockReport = async (evt: React.FormEvent) => {
     evt.preventDefault();
     if (!name || !email || !company || !role) return;
-    setIsSubmitting(true);
+
+    setPhase('generating');
+    setError('');
+
+    const context = { company, role, industry, companySize, primaryGoal, biggestChallenge, aiTools };
+
+    let fullReport = '';
+    try {
+      fullReport = await getAIAssessment(score, maxScore, answers, (text) => {
+        setStreamedReport(text);
+      }, context);
+      setStreamedReport(fullReport);
+    } catch (e: any) {
+      setError(e.message || 'Failed to generate your report. Please try again.');
+      setPhase('form');
+      return;
+    }
+
+    // Capture lead + generate PDF
     try {
       const res = await fetch('/api/capture', {
         method: 'POST',
@@ -168,37 +226,32 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
       if (data.pdfUrl) setPdfUrl(data.pdfUrl);
     } catch (err) {
       console.error('Capture error:', err);
-    } finally {
-      setReportUnlocked(true);
-      setIsSubmitting(false);
     }
-  };
 
-  const getTeaser = (report: string) => {
-    if (!report) return '';
-    const sections = report.split('###');
-    return sections.length > 1 ? `### ${sections[1]}`.trim() : report;
+    setPhase('complete');
   };
 
   const renderContent = () => {
-    if (isLoading) return <LoadingSpinner />;
-    if (error) return <p className="text-red-400 mt-4 text-center">{error}</p>;
+    if (phase === 'generating') {
+      return <GeneratingIndicator streamedText={streamedReport} />;
+    }
 
-    if (reportUnlocked) {
+    if (phase === 'complete') {
       return (
-        <div className="mt-8 space-y-4">
-          <div className="flex items-center gap-3 bg-green-900/30 border border-green-700 rounded-lg px-4 py-3 animate-fade-in">
-            <span className="text-green-400 text-lg">✓</span>
+        <div className="mt-8 space-y-4 animate-fade-in">
+          <div className="flex items-center gap-3 bg-green-900/30 border border-green-700 rounded-lg px-4 py-3">
+            <span className="text-green-400 text-lg flex-shrink-0">✓</span>
             <p className="text-green-300 text-sm">
               Thanks, <strong>{name}</strong>! Your report is below and a copy is on its way to <strong>{email}</strong>.
             </p>
           </div>
+
           {pdfUrl && (
             <a
               href={pdfUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 w-full py-3 px-6 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg transition shadow-lg shadow-indigo-600/20 animate-fade-in"
+              className="flex items-center justify-center gap-2 w-full py-3 px-6 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg transition shadow-lg shadow-indigo-600/20"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
@@ -206,139 +259,168 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
               Download Your Report (PDF)
             </a>
           )}
+
           <div className="text-left bg-gray-900/50 p-6 rounded-lg border border-gray-700">
-            <h3 className="text-2xl font-bold text-white mb-4">Your Personalised Feedback</h3>
-            <ReportRenderer markdown={fullReport} />
+            <h3 className="text-2xl font-bold text-white mb-4">Your Personalised Assessment</h3>
+            <ReportRenderer markdown={streamedReport} />
           </div>
         </div>
       );
     }
 
+    // Phase: 'form'
     return (
-      <>
-        <div className="mt-8 text-left bg-gray-900/50 p-6 rounded-lg border border-gray-700">
-          <h3 className="text-xl font-bold text-white mb-2">Your Analysis Preview</h3>
-          <ReportRenderer markdown={getTeaser(fullReport)} />
-        </div>
+      <div className="mt-8 p-6 rounded-lg border border-dashed border-indigo-500 bg-indigo-900/20 animate-fade-in">
+        <h3 className="text-2xl font-bold text-white text-center">Get Your Full Report</h3>
+        <p className="text-gray-400 mt-2 text-center text-sm">
+          Enter your details below and we'll generate a personalised PDF report with tailored recommendations — emailed to you instantly.
+        </p>
 
-        {!showForm ? (
-          <div className="mt-8 text-center">
-            <button
-              onClick={() => setShowForm(true)}
-              className="w-full sm:w-auto px-8 py-3 bg-indigo-600 text-white font-semibold rounded-md hover:bg-indigo-500 transition shadow-lg shadow-indigo-600/20"
-            >
-              Read My Full Report
-            </button>
-          </div>
-        ) : (
-          <div className="mt-8 p-6 rounded-lg border border-dashed border-indigo-500 bg-indigo-900/20 animate-fade-in">
-            <h3 className="text-2xl font-bold text-white text-center">Unlock Your Full Report</h3>
-            <p className="text-gray-400 mt-2 text-center text-sm">
-              Your personalised PDF report — with tailored recommendations — will be emailed to you instantly.
-            </p>
-
-            <form onSubmit={handleUnlockReport} className="mt-6 space-y-3 max-w-lg mx-auto">
-
-              {/* Row 1: Name + Company */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label htmlFor="name" className="block text-xs text-gray-400 mb-1">Full Name <span className="text-indigo-400">*</span></label>
-                  <input
-                    type="text" id="name" name="name" autoComplete="name" required
-                    value={name} onChange={e => setName(e.target.value)}
-                    className={inputCls} placeholder="Jane Smith"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="company" className="block text-xs text-gray-400 mb-1">Company <span className="text-indigo-400">*</span></label>
-                  <input
-                    type="text" id="company" name="organization" autoComplete="organization" required
-                    value={company} onChange={e => setCompany(e.target.value)}
-                    className={inputCls} placeholder="Acme Corp"
-                  />
-                </div>
-              </div>
-
-              {/* Row 2: Email */}
-              <div>
-                <label htmlFor="email" className="block text-xs text-gray-400 mb-1">Work Email <span className="text-indigo-400">*</span></label>
-                <input
-                  type="email" id="email" name="email" autoComplete="email" required
-                  value={email} onChange={e => setEmail(e.target.value)}
-                  className={inputCls} placeholder="jane@acmecorp.com"
-                />
-              </div>
-
-              {/* Row 3: Role + Industry */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label htmlFor="role" className="block text-xs text-gray-400 mb-1">Your Role <span className="text-indigo-400">*</span></label>
-                  <select
-                    id="role" value={role} onChange={e => setRole(e.target.value)} required
-                    className={selectCls}
-                  >
-                    <option value="">Select your role…</option>
-                    {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label htmlFor="industry" className="block text-xs text-gray-400 mb-1">Industry</label>
-                  <select
-                    id="industry" value={industry} onChange={e => setIndustry(e.target.value)}
-                    className={selectCls}
-                  >
-                    <option value="">Select your industry…</option>
-                    {INDUSTRIES.map(ind => <option key={ind} value={ind}>{ind}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              {/* Row 4: Company size */}
-              <div>
-                <label htmlFor="companySize" className="block text-xs text-gray-400 mb-1">Company Size</label>
-                <select
-                  id="companySize" value={companySize} onChange={e => setCompanySize(e.target.value)}
-                  className={selectCls}
-                >
-                  <option value="">Select company size…</option>
-                  {COMPANY_SIZES.map(sz => <option key={sz} value={sz}>{sz}</option>)}
-                </select>
-              </div>
-
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  disabled={!name || !email || !company || !role || isSubmitting}
-                  className="w-full py-3 px-6 bg-indigo-600 text-white font-semibold rounded-md hover:bg-indigo-500 disabled:bg-indigo-800 disabled:text-gray-400 disabled:cursor-not-allowed transition shadow-lg shadow-indigo-600/20"
-                >
-                  {isSubmitting ? 'Generating your PDF…' : 'Get My Full Report & PDF'}
-                </button>
-                <p className="text-center text-xs text-gray-500 mt-2">
-                  No spam. Just your report and one follow-up from our team.
-                </p>
-              </div>
-            </form>
+        {error && (
+          <div className="mt-4 px-4 py-3 bg-red-900/30 border border-red-700 rounded-lg text-red-300 text-sm text-center">
+            {error}
           </div>
         )}
-      </>
+
+        <form onSubmit={handleUnlockReport} className="mt-6 space-y-4 max-w-lg mx-auto">
+
+          {/* Section: About You */}
+          <p className="text-xs font-semibold uppercase tracking-widest text-indigo-400">About You</p>
+
+          {/* Row 1: Name + Company */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="name" className="block text-xs text-gray-400 mb-1">Full Name <span className="text-indigo-400">*</span></label>
+              <input
+                type="text" id="name" name="name" autoComplete="name" required
+                value={name} onChange={e => setName(e.target.value)}
+                className={inputCls} placeholder="Jane Smith"
+              />
+            </div>
+            <div>
+              <label htmlFor="company" className="block text-xs text-gray-400 mb-1">Company <span className="text-indigo-400">*</span></label>
+              <input
+                type="text" id="company" name="organization" autoComplete="organization" required
+                value={company} onChange={e => setCompany(e.target.value)}
+                className={inputCls} placeholder="Acme Corp"
+              />
+            </div>
+          </div>
+
+          {/* Row 2: Email */}
+          <div>
+            <label htmlFor="email" className="block text-xs text-gray-400 mb-1">Work Email <span className="text-indigo-400">*</span></label>
+            <input
+              type="email" id="email" name="email" autoComplete="email" required
+              value={email} onChange={e => setEmail(e.target.value)}
+              className={inputCls} placeholder="jane@acmecorp.com"
+            />
+          </div>
+
+          {/* Row 3: Role + Industry */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="role" className="block text-xs text-gray-400 mb-1">Your Role <span className="text-indigo-400">*</span></label>
+              <select id="role" value={role} onChange={e => setRole(e.target.value)} required className={selectCls}>
+                <option value="">Select your role…</option>
+                {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="industry" className="block text-xs text-gray-400 mb-1">Industry</label>
+              <select id="industry" value={industry} onChange={e => setIndustry(e.target.value)} className={selectCls}>
+                <option value="">Select your industry…</option>
+                {INDUSTRIES.map(ind => <option key={ind} value={ind}>{ind}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Row 4: Company size */}
+          <div>
+            <label htmlFor="companySize" className="block text-xs text-gray-400 mb-1">Company Size</label>
+            <select id="companySize" value={companySize} onChange={e => setCompanySize(e.target.value)} className={selectCls}>
+              <option value="">Select company size…</option>
+              {COMPANY_SIZES.map(sz => <option key={sz} value={sz}>{sz}</option>)}
+            </select>
+          </div>
+
+          {/* Divider */}
+          <div className="pt-2 border-t border-gray-700/60" />
+
+          {/* Section: AI Context */}
+          <p className="text-xs font-semibold uppercase tracking-widest text-indigo-400">Personalise Your Report <span className="text-gray-500 normal-case font-normal tracking-normal">(optional — but makes recommendations far more relevant)</span></p>
+
+          {/* Primary Goal */}
+          <div>
+            <label htmlFor="primaryGoal" className="block text-xs text-gray-400 mb-1">What's your primary AI goal right now?</label>
+            <select id="primaryGoal" value={primaryGoal} onChange={e => setPrimaryGoal(e.target.value)} className={selectCls}>
+              <option value="">Select a goal…</option>
+              {PRIMARY_GOALS.map(g => <option key={g} value={g}>{g}</option>)}
+            </select>
+          </div>
+
+          {/* Biggest Challenge */}
+          <div>
+            <label htmlFor="biggestChallenge" className="block text-xs text-gray-400 mb-1">What's your biggest challenge with AI right now?</label>
+            <select id="biggestChallenge" value={biggestChallenge} onChange={e => setBiggestChallenge(e.target.value)} className={selectCls}>
+              <option value="">Select a challenge…</option>
+              {BIGGEST_CHALLENGES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+
+          {/* AI Tools */}
+          <div>
+            <label htmlFor="aiTools" className="block text-xs text-gray-400 mb-1">AI tools you're currently using (if any)</label>
+            <textarea
+              id="aiTools"
+              value={aiTools}
+              onChange={e => setAiTools(e.target.value)}
+              rows={2}
+              className={`${inputCls} resize-none`}
+              placeholder="e.g. ChatGPT, Copilot, Midjourney, custom LLM…"
+            />
+          </div>
+
+          <div className="pt-2">
+            <button
+              type="submit"
+              disabled={!name || !email || !company || !role}
+              className="w-full py-3 px-6 bg-indigo-600 text-white font-semibold rounded-md hover:bg-indigo-500 disabled:bg-indigo-800 disabled:text-gray-400 disabled:cursor-not-allowed transition shadow-lg shadow-indigo-600/20"
+            >
+              Generate My Personalised Report
+            </button>
+            <p className="text-center text-xs text-gray-500 mt-2">
+              No spam. Just your report and one follow-up from our team.
+            </p>
+          </div>
+        </form>
+      </div>
     );
   };
 
   return (
     <div className="w-full max-w-3xl mx-auto p-4 sm:p-6 animate-fade-in">
       <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl p-6 sm:p-8 shadow-2xl">
+
+        {/* Score + Tier */}
         <div className="text-center">
           <h2 className="text-3xl font-bold text-white">Your AI Readiness Score</h2>
-          <p className="text-gray-400 mt-2">You've completed the assessment. Here's how you scored.</p>
+          <p className="text-gray-400 mt-2">You've completed the assessment. Here's where you stand.</p>
           <div className="my-8">
             <ScoreGauge score={score} maxScore={maxScore} />
           </div>
         </div>
 
+        {/* Tier description */}
+        <div className={`rounded-lg border px-5 py-4 text-sm leading-relaxed ${badge}`}>
+          <span className="font-semibold block mb-1">{tier} — What this means</span>
+          {description}
+        </div>
+
         {renderContent()}
 
         <div className="mt-10 border-t border-gray-700 pt-6 text-center">
-          <button onClick={onRestart} className="text-indigo-400 hover:text-indigo-300 transition">
+          <button onClick={onRestart} className="text-indigo-400 hover:text-indigo-300 transition text-sm">
             Take the assessment again
           </button>
         </div>

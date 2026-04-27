@@ -1,11 +1,22 @@
 import { Answers } from '../types';
 import { SURVEY_QUESTIONS } from '../constants';
 
+interface ReportContext {
+  company?: string;
+  role?: string;
+  industry?: string;
+  companySize?: string;
+  primaryGoal?: string;
+  biggestChallenge?: string;
+  aiTools?: string;
+}
+
 export async function getAIAssessment(
   score: number,
   maxScore: number,
   answers: Answers,
-  onChunk?: (text: string) => void
+  onChunk?: (text: string) => void,
+  context?: ReportContext,
 ): Promise<string> {
   const relevantAnswers = SURVEY_QUESTIONS
     .filter(q => q.type === 'radio' && answers[q.id])
@@ -18,7 +29,7 @@ export async function getAIAssessment(
   const response = await fetch('/api/assess', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ score, maxScore, relevantAnswers }),
+    body: JSON.stringify({ score, maxScore, relevantAnswers, context }),
   });
 
   if (!response.ok) throw new Error('Failed to generate assessment. Please try again.');
