@@ -99,6 +99,7 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
   const [error, setError] = useState<string>('');
   const [showForm, setShowForm] = useState<boolean>(false);
   const [reportUnlocked, setReportUnlocked] = useState<boolean>(false);
+  const [pdfUrl, setPdfUrl] = useState<string>('');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -128,11 +129,13 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
 
     setIsSubmitting(true);
     try {
-      await fetch('/api/capture', {
+      const res = await fetch('/api/capture', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, score, maxScore }),
+        body: JSON.stringify({ name, email, score, maxScore, fullReport }),
       });
+      const data = await res.json();
+      if (data.pdfUrl) setPdfUrl(data.pdfUrl);
     } catch (error) {
       console.error('Capture error:', error);
     } finally {
@@ -163,6 +166,19 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
                     <span className="text-green-400 text-lg">✓</span>
                     <p className="text-green-300 text-sm">Thanks, <strong>{name}</strong>! Your report is below and a copy is on its way to <strong>{email}</strong>.</p>
                 </div>
+                {pdfUrl && (
+                    <a
+                        href={pdfUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-2 w-full py-3 px-6 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg transition shadow-lg shadow-indigo-600/20 animate-fade-in"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                        </svg>
+                        Download Your Report (PDF)
+                    </a>
+                )}
                 <div className="text-left bg-gray-900/50 p-6 rounded-lg border border-gray-700">
                     <h3 className="text-2xl font-bold text-white mb-4">Your Personalized Feedback</h3>
                     <ReportRenderer markdown={fullReport} />
@@ -227,7 +243,7 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
                                 disabled={!name || !email || isSubmitting}
                                 className="w-full sm:w-auto px-8 py-3 bg-indigo-600 text-white font-semibold rounded-md hover:bg-indigo-500 disabled:bg-indigo-800 disabled:text-gray-400 disabled:cursor-not-allowed transition shadow-lg shadow-indigo-600/20"
                             >
-                                {isSubmitting ? 'Unlocking...' : 'Get My Full Report'}
+                                {isSubmitting ? 'Generating your PDF...' : 'Get My Full Report & PDF'}
                             </button>
                         </div>
                     </form>
