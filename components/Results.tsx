@@ -25,25 +25,27 @@ const ScoreGauge: React.FC<{ score: number; maxScore: number }> = ({ score, maxS
     }
 
     return (
-        <div className="relative flex flex-col items-center justify-center">
-            <svg className="w-40 h-40 transform -rotate-90" viewBox="0 0 120 120">
-                <circle cx="60" cy="60" r="55" strokeWidth="10" className="text-gray-700" stroke="currentColor" fill="transparent" />
-                <circle
-                    cx="60"
-                    cy="60"
-                    r="55"
-                    strokeWidth="10"
-                    className={`${color} transition-all duration-1000 ease-out`}
-                    stroke="currentColor"
-                    fill="transparent"
-                    strokeDasharray={circumference}
-                    strokeDashoffset={strokeDashoffset}
-                    strokeLinecap="round"
-                />
-            </svg>
-            <div className="absolute flex flex-col items-center">
-                <span className="text-4xl font-extrabold text-white">{score}</span>
-                <span className="text-sm text-gray-400">out of {maxScore}</span>
+        <div className="flex flex-col items-center justify-center">
+            <div className="relative w-40 h-40">
+                <svg className="w-40 h-40 transform -rotate-90" viewBox="0 0 120 120">
+                    <circle cx="60" cy="60" r="55" strokeWidth="10" className="text-gray-700" stroke="currentColor" fill="transparent" />
+                    <circle
+                        cx="60"
+                        cy="60"
+                        r="55"
+                        strokeWidth="10"
+                        className={`${color} transition-all duration-1000 ease-out`}
+                        stroke="currentColor"
+                        fill="transparent"
+                        strokeDasharray={circumference}
+                        strokeDashoffset={strokeDashoffset}
+                        strokeLinecap="round"
+                    />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-4xl font-extrabold text-white">{score}</span>
+                    <span className="text-sm text-gray-400">out of {maxScore}</span>
+                </div>
             </div>
             <div className={`mt-4 text-2xl font-bold ${color}`}>{tier}</div>
         </div>
