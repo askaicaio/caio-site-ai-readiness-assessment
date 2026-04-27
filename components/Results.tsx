@@ -204,7 +204,7 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
 
   const handleUnlockReport = async (evt: React.FormEvent) => {
     evt.preventDefault();
-    if (!name || !email || !company) return;
+    if (!name || !email) return;
 
     setPhase('generating');
     setError('');
@@ -284,9 +284,9 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
     // Phase: 'form'
     return (
       <div className="mt-8 p-6 rounded-lg border border-dashed border-indigo-500 bg-indigo-900/20 animate-fade-in">
-        <h3 className="text-2xl font-bold text-white text-center">Get Your Full Report</h3>
+        <h3 className="text-2xl font-bold text-white text-center">Get Your Report</h3>
         <p className="text-gray-400 mt-2 text-center text-sm">
-          Enter your details below and we'll generate a personalised PDF report with tailored recommendations — emailed to you instantly.
+          Your personalised PDF will be emailed to you instantly.
         </p>
 
         {error && (
@@ -295,13 +295,10 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
           </div>
         )}
 
-        <form onSubmit={handleUnlockReport} className="mt-6 space-y-4 max-w-lg mx-auto">
+        <form onSubmit={handleUnlockReport} className="mt-6 max-w-lg mx-auto">
 
-          {/* Section: About You */}
-          <p className="text-xs font-semibold uppercase tracking-widest text-indigo-400">About You</p>
-
-          {/* Row 1: Name + Company */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* ═══ TIER 1: Quick report (only required fields) ═══ */}
+          <div className="space-y-3">
             <div>
               <label htmlFor="name" className="block text-xs text-gray-400 mb-1">Full Name <span className="text-indigo-400">*</span></label>
               <input
@@ -311,122 +308,138 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
               />
             </div>
             <div>
-              <label htmlFor="company" className="block text-xs text-gray-400 mb-1">Company <span className="text-indigo-400">*</span></label>
+              <label htmlFor="email" className="block text-xs text-gray-400 mb-1">Work Email <span className="text-indigo-400">*</span></label>
               <input
-                type="text" id="company" name="organization" autoComplete="organization" required
-                value={company} onChange={e => setCompany(e.target.value)}
-                className={inputCls} placeholder="Acme Corp"
+                type="email" id="email" name="email" autoComplete="email" required
+                value={email} onChange={e => setEmail(e.target.value)}
+                className={inputCls} placeholder="jane@acmecorp.com"
               />
             </div>
-          </div>
-
-          {/* Row 2: Email */}
-          <div>
-            <label htmlFor="email" className="block text-xs text-gray-400 mb-1">Work Email <span className="text-indigo-400">*</span></label>
-            <input
-              type="email" id="email" name="email" autoComplete="email" required
-              value={email} onChange={e => setEmail(e.target.value)}
-              className={inputCls} placeholder="jane@acmecorp.com"
-            />
-          </div>
-
-          {/* Row 3: Role + Industry */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label htmlFor="role" className="block text-xs text-gray-400 mb-1">Your Role</label>
-              <select id="role" value={role} onChange={e => setRole(e.target.value)} className={selectCls}>
-                <option value="">Select your role…</option>
-                {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="industry" className="block text-xs text-gray-400 mb-1">Industry</label>
-              <select id="industry" value={industry} onChange={e => setIndustry(e.target.value)} className={selectCls}>
-                <option value="">Select your industry…</option>
-                {INDUSTRIES.map(ind => <option key={ind} value={ind}>{ind}</option>)}
-              </select>
-            </div>
-          </div>
-
-          {/* Row 4: Company size */}
-          <div>
-            <label htmlFor="companySize" className="block text-xs text-gray-400 mb-1">Company Size</label>
-            <select id="companySize" value={companySize} onChange={e => setCompanySize(e.target.value)} className={selectCls}>
-              <option value="">Select company size…</option>
-              {COMPANY_SIZES.map(sz => <option key={sz} value={sz}>{sz}</option>)}
-            </select>
-          </div>
-
-          {/* Divider */}
-          <div className="pt-2 border-t border-gray-700/60" />
-
-          {/* Section: AI Context */}
-          <p className="text-xs font-semibold uppercase tracking-widest text-indigo-400">Personalise Your Report <span className="text-gray-500 normal-case font-normal tracking-normal">(optional — but makes recommendations far more relevant)</span></p>
-
-          {/* Primary Goals — multi-select */}
-          <div>
-            <label className="block text-xs text-gray-400 mb-2">
-              What are your primary AI goals right now? <span className="text-gray-500 normal-case">(select all that apply)</span>
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {PRIMARY_GOALS.map(g => {
-                const checked = primaryGoals.includes(g);
-                return (
-                  <label
-                    key={g}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-md border cursor-pointer transition text-sm ${
-                      checked
-                        ? 'bg-indigo-900/40 border-indigo-500 text-white'
-                        : 'bg-gray-800 border-gray-600 text-gray-200 hover:border-gray-500'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => togglePrimaryGoal(g)}
-                      className="w-4 h-4 accent-indigo-500 flex-shrink-0"
-                    />
-                    <span>{g}</span>
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Biggest Challenge */}
-          <div>
-            <label htmlFor="biggestChallenge" className="block text-xs text-gray-400 mb-1">What's your biggest challenge with AI right now?</label>
-            <select id="biggestChallenge" value={biggestChallenge} onChange={e => setBiggestChallenge(e.target.value)} className={selectCls}>
-              <option value="">Select a challenge…</option>
-              {BIGGEST_CHALLENGES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-
-          {/* AI Tools */}
-          <div>
-            <label htmlFor="aiTools" className="block text-xs text-gray-400 mb-1">AI tools you're currently using (if any)</label>
-            <textarea
-              id="aiTools"
-              value={aiTools}
-              onChange={e => setAiTools(e.target.value)}
-              rows={2}
-              className={`${inputCls} resize-none`}
-              placeholder="e.g. ChatGPT, Copilot, Midjourney, custom LLM…"
-            />
-          </div>
-
-          <div className="pt-2">
             <button
               type="submit"
-              disabled={!name || !email || !company}
+              disabled={!name || !email}
               className="w-full py-3 px-6 bg-indigo-600 text-white font-semibold rounded-md hover:bg-indigo-500 disabled:bg-indigo-800 disabled:text-gray-400 disabled:cursor-not-allowed transition shadow-lg shadow-indigo-600/20"
             >
-              Generate My Personalised Report
+              Generate My Report
             </button>
-            <p className="text-center text-xs text-gray-500 mt-2">
-              No spam. Just your report and one follow-up from our team.
-            </p>
           </div>
+
+          {/* ═══ Divider ═══ */}
+          <div className="my-8 flex items-center gap-3">
+            <div className="flex-1 border-t border-gray-700" />
+            <span className="text-[10px] text-gray-500 uppercase tracking-widest whitespace-nowrap">Or get a more personalised report</span>
+            <div className="flex-1 border-t border-gray-700" />
+          </div>
+
+          {/* ═══ TIER 2: Comprehensive report (all optional) ═══ */}
+          <div className="space-y-4">
+            <p className="text-xs text-gray-400 -mt-1">
+              Share a bit more about your context and we'll generate a deeply tailored report with industry-specific recommendations. All fields below are optional.
+            </p>
+
+            {/* Row: Company + Role */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="company" className="block text-xs text-gray-400 mb-1">Company</label>
+                <input
+                  type="text" id="company" name="organization" autoComplete="organization"
+                  value={company} onChange={e => setCompany(e.target.value)}
+                  className={inputCls} placeholder="Acme Corp"
+                />
+              </div>
+              <div>
+                <label htmlFor="role" className="block text-xs text-gray-400 mb-1">Your Role</label>
+                <select id="role" value={role} onChange={e => setRole(e.target.value)} className={selectCls}>
+                  <option value="">Select your role…</option>
+                  {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Row: Industry + Company size */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="industry" className="block text-xs text-gray-400 mb-1">Industry</label>
+                <select id="industry" value={industry} onChange={e => setIndustry(e.target.value)} className={selectCls}>
+                  <option value="">Select your industry…</option>
+                  {INDUSTRIES.map(ind => <option key={ind} value={ind}>{ind}</option>)}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="companySize" className="block text-xs text-gray-400 mb-1">Company Size</label>
+                <select id="companySize" value={companySize} onChange={e => setCompanySize(e.target.value)} className={selectCls}>
+                  <option value="">Select company size…</option>
+                  {COMPANY_SIZES.map(sz => <option key={sz} value={sz}>{sz}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Primary Goals — multi-select */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-2">
+                What are your primary AI goals right now? <span className="text-gray-500">(select all that apply)</span>
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {PRIMARY_GOALS.map(g => {
+                  const checked = primaryGoals.includes(g);
+                  return (
+                    <label
+                      key={g}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-md border cursor-pointer transition text-sm ${
+                        checked
+                          ? 'bg-indigo-900/40 border-indigo-500 text-white'
+                          : 'bg-gray-800 border-gray-600 text-gray-200 hover:border-gray-500'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => togglePrimaryGoal(g)}
+                        className="w-4 h-4 accent-indigo-500 flex-shrink-0"
+                      />
+                      <span>{g}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Biggest Challenge */}
+            <div>
+              <label htmlFor="biggestChallenge" className="block text-xs text-gray-400 mb-1">What's your biggest challenge with AI right now?</label>
+              <select id="biggestChallenge" value={biggestChallenge} onChange={e => setBiggestChallenge(e.target.value)} className={selectCls}>
+                <option value="">Select a challenge…</option>
+                {BIGGEST_CHALLENGES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+
+            {/* AI Tools */}
+            <div>
+              <label htmlFor="aiTools" className="block text-xs text-gray-400 mb-1">AI tools you're currently using (if any)</label>
+              <textarea
+                id="aiTools"
+                value={aiTools}
+                onChange={e => setAiTools(e.target.value)}
+                rows={2}
+                className={`${inputCls} resize-none`}
+                placeholder="e.g. ChatGPT, Copilot, Midjourney, custom LLM…"
+              />
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="submit"
+                disabled={!name || !email}
+                className="w-full py-3 px-6 bg-indigo-600 text-white font-semibold rounded-md hover:bg-indigo-500 disabled:bg-indigo-800 disabled:text-gray-400 disabled:cursor-not-allowed transition shadow-lg shadow-indigo-600/20"
+              >
+                Generate My Personalised Report
+              </button>
+            </div>
+          </div>
+
+          <p className="text-center text-xs text-gray-500 mt-4">
+            No spam. Just your report and one follow-up from our team.
+          </p>
         </form>
       </div>
     );
