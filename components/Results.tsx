@@ -191,9 +191,13 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
   const [companySize, setCompanySize]     = useState('');
 
   // Personalisation fields
-  const [primaryGoal, setPrimaryGoal]         = useState('');
+  const [primaryGoals, setPrimaryGoals]       = useState<string[]>([]);
   const [biggestChallenge, setBiggestChallenge] = useState('');
   const [aiTools, setAiTools]                 = useState('');
+
+  const togglePrimaryGoal = (goal: string) => {
+    setPrimaryGoals(prev => prev.includes(goal) ? prev.filter(g => g !== goal) : [...prev, goal]);
+  };
 
   const percentage = maxScore > 0 ? (score / maxScore) * 100 : 0;
   const { tier, badge, description } = getTierConfig(percentage);
@@ -205,7 +209,12 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
     setPhase('generating');
     setError('');
 
-    const context = { company, role, industry, companySize, primaryGoal, biggestChallenge, aiTools };
+    const context = {
+      company, role, industry, companySize,
+      primaryGoal: primaryGoals.join(', '),
+      biggestChallenge,
+      aiTools,
+    };
 
     let fullReport = '';
     try {
@@ -354,13 +363,34 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
           {/* Section: AI Context */}
           <p className="text-xs font-semibold uppercase tracking-widest text-indigo-400">Personalise Your Report <span className="text-gray-500 normal-case font-normal tracking-normal">(optional — but makes recommendations far more relevant)</span></p>
 
-          {/* Primary Goal */}
+          {/* Primary Goals — multi-select */}
           <div>
-            <label htmlFor="primaryGoal" className="block text-xs text-gray-400 mb-1">What's your primary AI goal right now?</label>
-            <select id="primaryGoal" value={primaryGoal} onChange={e => setPrimaryGoal(e.target.value)} className={selectCls}>
-              <option value="">Select a goal…</option>
-              {PRIMARY_GOALS.map(g => <option key={g} value={g}>{g}</option>)}
-            </select>
+            <label className="block text-xs text-gray-400 mb-2">
+              What are your primary AI goals right now? <span className="text-gray-500 normal-case">(select all that apply)</span>
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {PRIMARY_GOALS.map(g => {
+                const checked = primaryGoals.includes(g);
+                return (
+                  <label
+                    key={g}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-md border cursor-pointer transition text-sm ${
+                      checked
+                        ? 'bg-indigo-900/40 border-indigo-500 text-white'
+                        : 'bg-gray-800 border-gray-600 text-gray-200 hover:border-gray-500'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => togglePrimaryGoal(g)}
+                      className="w-4 h-4 accent-indigo-500 flex-shrink-0"
+                    />
+                    <span>{g}</span>
+                  </label>
+                );
+              })}
+            </div>
           </div>
 
           {/* Biggest Challenge */}
