@@ -337,8 +337,17 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
               Share a bit more about your context and we'll generate a deeply tailored report with industry-specific recommendations. All fields below are optional.
             </p>
 
-            {/* Row: Company + Role */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Row: Role (its own row) */}
+            <div>
+              <label htmlFor="role" className="block text-xs text-gray-400 mb-1">Your Role</label>
+              <select id="role" value={role} onChange={e => setRole(e.target.value)} className={selectCls}>
+                <option value="">Select your role…</option>
+                {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+
+            {/* Row: Company + Industry + Company Size (3 across) */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label htmlFor="company" className="block text-xs text-gray-400 mb-1">Company</label>
                 <input
@@ -348,27 +357,16 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
                 />
               </div>
               <div>
-                <label htmlFor="role" className="block text-xs text-gray-400 mb-1">Your Role</label>
-                <select id="role" value={role} onChange={e => setRole(e.target.value)} className={selectCls}>
-                  <option value="">Select your role…</option>
-                  {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
-              </div>
-            </div>
-
-            {/* Row: Industry + Company size */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
                 <label htmlFor="industry" className="block text-xs text-gray-400 mb-1">Industry</label>
                 <select id="industry" value={industry} onChange={e => setIndustry(e.target.value)} className={selectCls}>
-                  <option value="">Select your industry…</option>
+                  <option value="">Select industry…</option>
                   {INDUSTRIES.map(ind => <option key={ind} value={ind}>{ind}</option>)}
                 </select>
               </div>
               <div>
                 <label htmlFor="companySize" className="block text-xs text-gray-400 mb-1">Company Size</label>
                 <select id="companySize" value={companySize} onChange={e => setCompanySize(e.target.value)} className={selectCls}>
-                  <option value="">Select company size…</option>
+                  <option value="">Select size…</option>
                   {COMPANY_SIZES.map(sz => <option key={sz} value={sz}>{sz}</option>)}
                 </select>
               </div>
