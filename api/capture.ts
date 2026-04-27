@@ -459,6 +459,11 @@ function buildPdf({ name, score, maxScore, tier, tierColor, date, sections, comp
 }
 
 // ─── MailerLite helper ────────────────────────────────────────────────────────
+// Two-step approach:
+//   1. POST /api/subscribers      → create or upsert the subscriber (+ fields)
+//   2. POST /api/subscribers/{id}/groups/{groupId} → EXPLICITLY assign to group
+// Step 2 is necessary because the `groups` array in step 1 is unreliable for
+// existing subscribers (MailerLite quirk — only honoured on first creation).
 async function addToMailerLite(
   email: string, name: string, pdfUrl: string,
   extras: { company?: string; role?: string; industry?: string; companySize?: string }
@@ -471,7 +476,6 @@ async function addToMailerLite(
     return;
   }
 
-  const ML_URL = 'https://connect.mailerlite.com/api/subscribers';
   const headers = {
     'Authorization': `Bearer ${apiKey}`,
     'Content-Type': 'application/json',
@@ -485,51 +489,69 @@ async function addToMailerLite(
   if (extras.industry)    fields.industry     = extras.industry;
   if (extras.companySize) fields.company_size = extras.companySize;
 
+  // ── Step 1: Create or update the subscriber ─────────────────────────────
+  const SUB_URL = 'https://connect.mailerlite.com/api/subscribers';
   const payload = { email, fields, groups: [MAILERLITE_GROUP_ID], status: 'active' };
-  console.log('[ML] POST', ML_URL, 'payload:', JSON.stringify(payload));
+  console.log('[ML] POST', SUB_URL, 'payload:', JSON.stringify(payload));
 
-  let res: Response;
+  let subscriberId: string | undefined;
   try {
-    res = await fetch(ML_URL, { method: 'POST', headers, body: JSON.stringify(payload) });
-  } catch (err) {
-    console.error('[ML] fetch threw:', err);
-    return;
-  }
+    const res = await fetch(SUB_URL, { method: 'POST', headers, body: JSON.stringify(payload) });
+    const bodyText = await res.text();
+    console.log(`[ML] POST /subscribers → ${res.status}:`, bodyText.slice(0, 1500));
 
-  const bodyText = await res.text();
-  console.log(`[ML] response ${res.status} ${res.statusText}:`, bodyText.slice(0, 500));
-
-  if (res.ok) {
-    console.log('[ML] ✓ subscriber created with all fields');
-    return;
-  }
-
-  // 422 = validation error (likely a custom field doesn't exist). Retry minimal.
-  if (res.status === 422) {
-    console.log('[ML] 422 — retrying with name-only fields');
-    const minimal = { email, fields: { name }, groups: [MAILERLITE_GROUP_ID], status: 'active' };
-    const res2 = await fetch(ML_URL, { method: 'POST', headers, body: JSON.stringify(minimal) });
-    const body2 = await res2.text();
-    console.log(`[ML] retry response ${res2.status}:`, body2.slice(0, 500));
-    if (res2.ok) {
-      console.log('[ML] ✓ subscriber created (minimal fields). Some custom fields missing — check MailerLite admin.');
-      return;
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) {
+        console.error('[ML] AUTH FAILED. Regenerate key at https://dashboard.mailerlite.com/integrations/api and update MAILERLITE_API_KEY in Vercel env vars.');
+        return;
+      }
+      // 422 = a custom field doesn't exist in the MailerLite account. Retry with name only.
+      if (res.status === 422) {
+        console.log('[ML] 422 — retrying with name-only fields (custom field missing)');
+        const minimal = { email, fields: { name }, groups: [MAILERLITE_GROUP_ID], status: 'active' };
+        const res2 = await fetch(SUB_URL, { method: 'POST', headers, body: JSON.stringify(minimal) });
+        const body2 = await res2.text();
+        console.log(`[ML] retry response ${res2.status}:`, body2.slice(0, 800));
+        if (!res2.ok) return;
+        subscriberId = JSON.parse(body2)?.data?.id;
+      } else {
+        return;
+      }
+    } else {
+      const parsed = JSON.parse(bodyText);
+      subscriberId = parsed?.data?.id;
+      const groupsInResp = (parsed?.data?.groups || []).map((g: any) =>
+        typeof g === 'object' ? `${g.id}(${g.name})` : g
+      );
+      console.log(`[ML] parsed: subscriberId=${subscriberId}, groups in response=`, JSON.stringify(groupsInResp));
     }
+  } catch (err) {
+    console.error('[ML] subscribe call threw:', err);
+    return;
   }
 
-  // 401/403 = auth issue. Surface clearly.
-  if (res.status === 401 || res.status === 403) {
-    console.error('[ML] AUTH FAILED. Verify MAILERLITE_API_KEY is a valid token from https://dashboard.mailerlite.com/integrations/api');
+  if (!subscriberId) {
+    console.error('[ML] no subscriber id returned — cannot explicitly assign group.');
+    return;
   }
 
-  // Any other failure: try without the groups array — at least create the subscriber so we know the key works
-  console.log('[ML] last-ditch retry without groups');
-  const noGroups = { email, fields: { name }, status: 'active' };
-  const res3 = await fetch(ML_URL, { method: 'POST', headers, body: JSON.stringify(noGroups) });
-  const body3 = await res3.text();
-  console.log(`[ML] no-groups response ${res3.status}:`, body3.slice(0, 500));
-  if (res3.ok) {
-    console.error('[ML] subscriber created WITHOUT group — group ID', MAILERLITE_GROUP_ID, 'is likely wrong or inaccessible to this key.');
+  // ── Step 2: EXPLICITLY assign the subscriber to the group ──────────────
+  // This is the key fix — the upsert above silently ignores the groups[]
+  // array when updating an existing subscriber. Without this call the
+  // subscriber gets created/updated but never lands in "AI Assessment Leads".
+  const GROUP_URL = `https://connect.mailerlite.com/api/subscribers/${subscriberId}/groups/${MAILERLITE_GROUP_ID}`;
+  console.log('[ML] POST', GROUP_URL);
+  try {
+    const res = await fetch(GROUP_URL, { method: 'POST', headers });
+    const bodyText = await res.text();
+    console.log(`[ML] POST /subscribers/{id}/groups/{groupId} → ${res.status}:`, bodyText.slice(0, 800));
+    if (res.ok) {
+      console.log(`[ML] ✓ subscriber ${subscriberId} explicitly assigned to group ${MAILERLITE_GROUP_ID}`);
+    } else if (res.status === 404) {
+      console.error(`[ML] 404 — group ${MAILERLITE_GROUP_ID} or subscriber ${subscriberId} not found. Verify the group ID.`);
+    }
+  } catch (err) {
+    console.error('[ML] group-assign call threw:', err);
   }
 }
 
