@@ -107,9 +107,13 @@ const ScoreGauge: React.FC<{ score: number; maxScore: number }> = ({ score, maxS
             style={{ transition: 'stroke-dashoffset 1s ease-out' }}
           />
         </svg>
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
-          <span className="text-4xl font-extrabold text-white leading-none">{score}</span>
-          <span className="text-sm text-gray-400 mt-1 leading-none">out of {maxScore}</span>
+        {/* Centering trick: only the score number lives inside the centred container,
+            so its visual centre lands on the circle's geometric centre.
+            "out of N" is absolutely positioned just below via top-full so it
+            doesn't shift the score upward. */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+          <span className="block text-4xl font-extrabold text-white leading-none text-center">{score}</span>
+          <span className="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 whitespace-nowrap text-xs text-gray-400 leading-none">out of {maxScore}</span>
         </div>
       </div>
       <div className={`mt-4 text-2xl font-bold ${color}`}>{tier}</div>
