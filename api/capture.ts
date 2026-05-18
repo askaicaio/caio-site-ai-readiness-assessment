@@ -558,13 +558,47 @@ async function addToMailerLite(
   }
 }
 
+// ─── Attribution helpers ────────────────────────────────────────────────────
+// When the quiz frontend forwards UTMs we conditionally add an extra tag
+// in GHL so motherboard's per-campaign sync (which pulls by tag) can
+// separate ScalingUp-sourced leads from organic ones.
+//
+// Source-to-tag rules — add additional entries as we run more partnerships.
+const SOURCE_TAG_RULES: Array<{ match: RegExp; tag: string }> = [
+  { match: /^scaling[\s-]?up$/i, tag: 'scalingup-ai-assessment' },
+];
+
+interface Attribution {
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  utmContent?: string;
+  utmTerm?: string;
+  referer?: string;
+  capturedAt?: string;
+}
+
+function partnerTagFor(attribution?: Attribution): string | null {
+  const src = attribution?.utmSource?.trim();
+  if (!src) return null;
+  for (const rule of SOURCE_TAG_RULES) {
+    if (rule.match.test(src)) return rule.tag;
+  }
+  return null;
+}
+
 // ─── Handler ─────────────────────────────────────────────────────────────────
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).end();
 
-  const { name, email, score, maxScore, fullReport, company, role, industry, companySize } = req.body as {
+  const {
+    name, email, score, maxScore, fullReport,
+    company, role, industry, companySize,
+    attribution,
+  } = req.body as {
     name: string; email: string; score: number; maxScore: number; fullReport: string;
     company?: string; role?: string; industry?: string; companySize?: string;
+    attribution?: Attribution;
   };
 
   if (!name || !email) return res.status(400).json({ error: 'Name and email required' });
@@ -599,6 +633,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.error('PDF/Blob error:', err);
   }
 
+  // Attribution → GHL custom fields (so utm data is queryable on the contact)
+  // + conditional partner tag (so motherboard's per-campaign sync picks it up).
+  const partnerTag = partnerTagFor(attribution);
+  const tags = ['AI Assessment Completed', `AI Tier: ${tier}`];
+  if (partnerTag) tags.push(partnerTag);
+
+  const utmFields: Record<string, string | undefined> = {};
+  if (attribution?.utmSource)   utmFields.utm_source   = attribution.utmSource;
+  if (attribution?.utmMedium)   utmFields.utm_medium   = attribution.utmMedium;
+  if (attribution?.utmCampaign) utmFields.utm_campaign = attribution.utmCampaign;
+  if (attribution?.utmContent)  utmFields.utm_content  = attribution.utmContent;
+  if (attribution?.utmTerm)     utmFields.utm_term     = attribution.utmTerm;
+  if (attribution?.referer)     utmFields.referer      = attribution.referer;
+
   await Promise.allSettled([
     addToMailerLite(email, name, pdfUrl, { company, role, industry, companySize }),
     fetch(GHL_WEBHOOK_URL, {
@@ -606,8 +654,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name, email, company, role, industry, companySize,
-        customFields: { aiReadinessScore: score, maxScore, scorePercentage: pct, tier, assessmentDate: date, pdfUrl },
-        tags: ['AI Assessment Completed', `AI Tier: ${tier}`],
+        customFields: {
+          aiReadinessScore: score, maxScore, scorePercentage: pct, tier,
+          assessmentDate: date, pdfUrl,
+          ...utmFields,
+        },
+        tags,
+        // Pass attribution at the top level too — some GHL workflow setups
+        // read from the body root rather than customFields
+        ...utmFields,
       }),
     }).catch(err => console.error('GHL error:', err)),
   ]);

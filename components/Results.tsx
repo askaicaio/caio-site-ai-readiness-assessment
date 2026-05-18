@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { getAIAssessment } from '../services/claudeService';
+import { readAttribution } from '../services/attribution';
 import { Answers } from '../types';
 
 interface ResultsProps {
@@ -230,10 +231,18 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
 
     // Capture lead + generate PDF
     try {
+      const attribution = readAttribution();
       const res = await fetch('/api/capture', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, score, maxScore, fullReport, company, role, industry, companySize }),
+        body: JSON.stringify({
+          name, email, score, maxScore, fullReport,
+          company, role, industry, companySize,
+          // Forward attribution captured on entry (utm_source, utm_campaign, etc).
+          // Surfaces on the GHL contact + motherboard campaign so we can tell
+          // which marketing channel/email actually delivered the lead.
+          attribution,
+        }),
       });
       const data = await res.json();
       if (data.pdfUrl) setPdfUrl(data.pdfUrl);

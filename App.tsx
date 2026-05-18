@@ -1,15 +1,26 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { SURVEY_QUESTIONS, MAX_SCORE } from './constants';
 import { Answers, Question } from './types';
 import { ProgressBar } from './components/ProgressBar';
 import { QuestionCard } from './components/QuestionCard';
 import { Results } from './components/Results';
+import { captureAttributionFromUrl, pingQuizVisit } from './services/attribution';
 
 const App: React.FC = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState<Answers>({});
   const [showResults, setShowResults] = useState(false);
   const [score, setScore] = useState(0);
+
+  // Capture UTM attribution once on mount and (if utm_source is present)
+  // ping motherboard so we count the click. The capture persists in
+  // sessionStorage so Results.tsx can pick it up at completion time.
+  useEffect(() => {
+    const attribution = captureAttributionFromUrl();
+    if (attribution.utmSource) {
+      void pingQuizVisit(attribution);
+    }
+  }, []);
 
   const handleAnswerChange = useCallback((id: string, value: string) => {
     setAnswers(prev => ({ ...prev, [id]: value }));
