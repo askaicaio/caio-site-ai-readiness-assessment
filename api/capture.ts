@@ -560,15 +560,19 @@ async function addToMailerLite(
 
 // ─── Attribution helpers ────────────────────────────────────────────────────
 // Every quiz completion gets a STANDARD tag so motherboard's "AI Readiness
-// Quiz" campaign can pull all of them with one rule. Source-specific
-// distinctions (ScalingUp vs organic vs newsletter) are surfaced via the
-// utm_source / utm_campaign / utm_content custom fields, not via tags.
+// Quiz" campaign can pull all of them with one rule. On top of that we
+// derive source / campaign / email-number tags from UTMs so GHL workflows
+// can branch with simple "Has Tag" conditions instead of fiddling with
+// custom-field comparisons.
 //
-// Why kebab-case + lowercase: GHL's tag matching is most reliable when
-// stored exactly as-queried. We also keep the legacy display tag
-// "AI Assessment Completed" for backward compat with existing GHL
-// workflows that filter on it.
-const STANDARD_QUIZ_TAG = 'ai-assessment-quiz';
+// Tag scheme:
+//   - ai-readiness-quiz-completed  → motherboard sync key (always)
+//   - AI Assessment Completed      → legacy display tag (always)
+//   - AI Tier: {Explorer|Adopter|Leader} → tier badge (always)
+//   - source-{utm_source}          → e.g. source-caio (or 'source-organic' if no utm_source)
+//   - campaign-{utm_campaign}      → e.g. campaign-scalingup-collab (only if utm_campaign present)
+//   - email-{N}                    → e.g. email-1 (parsed from utm_content="email-1-...")
+const STANDARD_QUIZ_TAG = 'ai-readiness-quiz-completed';
 
 interface Attribution {
   utmSource?: string;
@@ -578,6 +582,45 @@ interface Attribution {
   utmTerm?: string;
   referer?: string;
   capturedAt?: string;
+}
+
+/** Convert a string into a GHL-safe tag fragment: lowercase, kebab-case, alphanumeric. */
+function slugify(s: string): string {
+  return s
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+/**
+ * Build the full tag list for a quiz completion given the tier + attribution.
+ * Mutates nothing; returns a fresh array each call.
+ */
+function buildTagsFor(tier: string, attribution?: Attribution): string[] {
+  const tags: string[] = [
+    STANDARD_QUIZ_TAG,
+    'AI Assessment Completed',
+    `AI Tier: ${tier}`,
+  ];
+
+  // Source tag (always present — 'source-organic' for direct/untracked traffic)
+  const src = attribution?.utmSource?.trim();
+  tags.push(src ? `source-${slugify(src)}` : 'source-organic');
+
+  // Campaign tag (only when utm_campaign provided)
+  const camp = attribution?.utmCampaign?.trim();
+  if (camp) tags.push(`campaign-${slugify(camp)}`);
+
+  // Email-N tag — parse the leading "email-N" from utm_content if present.
+  // Convention: utm_content="email-1-hidden-truth" → tag "email-1".
+  const content = attribution?.utmContent?.trim();
+  if (content) {
+    const m = content.match(/^email-(\d+)/i);
+    if (m) tags.push(`email-${m[1]}`);
+  }
+
+  return tags;
 }
 
 // ─── Handler ─────────────────────────────────────────────────────────────────
@@ -626,11 +669,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.error('PDF/Blob error:', err);
   }
 
-  // Tags:
-  //  - STANDARD_QUIZ_TAG ('ai-assessment-quiz') — the motherboard sync key
-  //  - 'AI Assessment Completed' — legacy display tag, existing GHL workflows depend on it
-  //  - 'AI Tier: X' — tier badge, surfaced in GHL UI for segmenting Explorer/Adopter/Leader
-  const tags = [STANDARD_QUIZ_TAG, 'AI Assessment Completed', `AI Tier: ${tier}`];
+  // Build tags from tier + attribution (see buildTagsFor for the full scheme).
+  const tags = buildTagsFor(tier, attribution);
 
   const utmFields: Record<string, string | undefined> = {};
   if (attribution?.utmSource)   utmFields.utm_source   = attribution.utmSource;
