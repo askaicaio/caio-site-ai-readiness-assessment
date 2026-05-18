@@ -559,14 +559,16 @@ async function addToMailerLite(
 }
 
 // ─── Attribution helpers ────────────────────────────────────────────────────
-// When the quiz frontend forwards UTMs we conditionally add an extra tag
-// in GHL so motherboard's per-campaign sync (which pulls by tag) can
-// separate ScalingUp-sourced leads from organic ones.
+// Every quiz completion gets a STANDARD tag so motherboard's "AI Readiness
+// Quiz" campaign can pull all of them with one rule. Source-specific
+// distinctions (ScalingUp vs organic vs newsletter) are surfaced via the
+// utm_source / utm_campaign / utm_content custom fields, not via tags.
 //
-// Source-to-tag rules — add additional entries as we run more partnerships.
-const SOURCE_TAG_RULES: Array<{ match: RegExp; tag: string }> = [
-  { match: /^scaling[\s-]?up$/i, tag: 'scalingup-ai-assessment' },
-];
+// Why kebab-case + lowercase: GHL's tag matching is most reliable when
+// stored exactly as-queried. We also keep the legacy display tag
+// "AI Assessment Completed" for backward compat with existing GHL
+// workflows that filter on it.
+const STANDARD_QUIZ_TAG = 'ai-assessment-quiz';
 
 interface Attribution {
   utmSource?: string;
@@ -576,15 +578,6 @@ interface Attribution {
   utmTerm?: string;
   referer?: string;
   capturedAt?: string;
-}
-
-function partnerTagFor(attribution?: Attribution): string | null {
-  const src = attribution?.utmSource?.trim();
-  if (!src) return null;
-  for (const rule of SOURCE_TAG_RULES) {
-    if (rule.match.test(src)) return rule.tag;
-  }
-  return null;
 }
 
 // ─── Handler ─────────────────────────────────────────────────────────────────
@@ -633,11 +626,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.error('PDF/Blob error:', err);
   }
 
-  // Attribution → GHL custom fields (so utm data is queryable on the contact)
-  // + conditional partner tag (so motherboard's per-campaign sync picks it up).
-  const partnerTag = partnerTagFor(attribution);
-  const tags = ['AI Assessment Completed', `AI Tier: ${tier}`];
-  if (partnerTag) tags.push(partnerTag);
+  // Tags:
+  //  - STANDARD_QUIZ_TAG ('ai-assessment-quiz') — the motherboard sync key
+  //  - 'AI Assessment Completed' — legacy display tag, existing GHL workflows depend on it
+  //  - 'AI Tier: X' — tier badge, surfaced in GHL UI for segmenting Explorer/Adopter/Leader
+  const tags = [STANDARD_QUIZ_TAG, 'AI Assessment Completed', `AI Tier: ${tier}`];
 
   const utmFields: Record<string, string | undefined> = {};
   if (attribution?.utmSource)   utmFields.utm_source   = attribution.utmSource;

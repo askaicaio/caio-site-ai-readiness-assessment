@@ -293,9 +293,9 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
     // Phase: 'form'
     return (
       <div className="mt-8 p-6 rounded-lg border border-dashed border-indigo-500 bg-indigo-900/20 animate-fade-in">
-        <h3 className="text-2xl font-bold text-white text-center">Get Your Report</h3>
+        <h3 className="text-2xl font-bold text-white text-center">Unlock Your Results</h3>
         <p className="text-gray-400 mt-2 text-center text-sm">
-          Your personalised PDF will be emailed to you instantly.
+          Your AI Readiness Score, tier, and a personalised PDF report — emailed to you instantly.
         </p>
 
         {error && (
@@ -452,24 +452,49 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
     );
   };
 
+  // Score + tier are gated until the lead submits the email form. This
+  // lifts conversion (people can't peek + bounce) and matches typical
+  // lead-magnet best practice. In phase='form' we show a generic
+  // completion headline; the actual score gauge + tier reveal only
+  // appear once we're past the form (generating or complete).
+  const scoreUnlocked = phase !== 'form';
+
   return (
     <div className="w-full max-w-3xl mx-auto p-4 sm:p-6 animate-fade-in">
       <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl p-6 sm:p-8 shadow-2xl">
 
-        {/* Score + Tier */}
+        {/* Header — copy + visual change depending on whether the score has been unlocked */}
         <div className="text-center">
-          <h2 className="text-3xl font-bold text-white">Your AI Readiness Score</h2>
-          <p className="text-gray-400 mt-2">You've completed the assessment. Here's where you stand.</p>
-          <div className="my-8">
-            <ScoreGauge score={score} maxScore={maxScore} />
-          </div>
+          {scoreUnlocked ? (
+            <>
+              <h2 className="text-3xl font-bold text-white">Your AI Readiness Score</h2>
+              <p className="text-gray-400 mt-2">You've completed the assessment. Here's where you stand.</p>
+              <div className="my-8">
+                <ScoreGauge score={score} maxScore={maxScore} />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-indigo-500/20 ring-2 ring-indigo-500/40">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-indigo-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h2 className="mt-5 text-3xl font-bold text-white">Assessment complete</h2>
+              <p className="text-gray-400 mt-2 max-w-md mx-auto">
+                Enter your details below to unlock your AI Readiness Score, tier, and a personalised report delivered straight to your inbox.
+              </p>
+            </>
+          )}
         </div>
 
-        {/* Tier description */}
-        <div className={`rounded-lg border px-5 py-4 text-sm leading-relaxed ${badge}`}>
-          <span className="font-semibold block mb-1">{tier} — What this means</span>
-          {description}
-        </div>
+        {/* Tier description — also gated until unlock */}
+        {scoreUnlocked && (
+          <div className={`rounded-lg border px-5 py-4 text-sm leading-relaxed ${badge}`}>
+            <span className="font-semibold block mb-1">{tier} — What this means</span>
+            {description}
+          </div>
+        )}
 
         {renderContent()}
 
