@@ -9,6 +9,16 @@ import { put } from '@vercel/blob';
 export const config = { maxDuration: 30 };
 
 const MAILERLITE_GROUP_ID = '185917251382150276';
+// Tier-specific groups. Each quiz-taker is added to their tier group on top of
+// the master group above. The tier group is what the per-tier welcome
+// automations trigger on ("when subscriber joins group"). Resolved (or created
+// if missing) by name at runtime — see resolveGroupIdByName() — so no extra IDs
+// need to be hard-coded. The names here MUST match the group names in MailerLite.
+const MAILERLITE_TIER_GROUPS: Record<string, string> = {
+  Explorer: 'AI Readiness - Explorer',
+  Adopter:  'AI Readiness - Adopter',
+  Leader:   'AI Readiness - Leader',
+};
 const GHL_WEBHOOK_URL = 'https://services.leadconnectorhq.com/hooks/FgaFLGYrbGZSBVprTkhR/webhook-trigger/elWtYyahvdVemgjf2SBn';
 const BOOKING_URL = 'https://api.leadconnectorhq.com/widget/bookings/b2b-executive-briefing';
 
@@ -461,15 +471,74 @@ function buildPdf({ name, score, maxScore, tier, tierColor, date, sections, comp
   );
 }
 
+// ─── MailerLite group helpers ──────────────────────────────────────────────────
+type MlHeaders = Record<string, string>;
+
+// Assign an existing subscriber to a group (idempotent — re-assigning is a no-op).
+async function assignToGroup(subscriberId: string, groupId: string, headers: MlHeaders) {
+  const url = `https://connect.mailerlite.com/api/subscribers/${subscriberId}/groups/${groupId}`;
+  try {
+    const res = await fetch(url, { method: 'POST', headers });
+    const body = await res.text();
+    if (res.ok) {
+      console.log(`[ML] ✓ subscriber ${subscriberId} assigned to group ${groupId}`);
+    } else {
+      console.error(`[ML] assign group ${groupId} → ${res.status}:`, body.slice(0, 300));
+    }
+  } catch (err) {
+    console.error(`[ML] assign group ${groupId} threw:`, err);
+  }
+}
+
+// Resolve a group's ID by its name, creating the group if it doesn't exist yet.
+// Lets us key off human-readable tier names instead of hard-coding more IDs.
+async function resolveGroupIdByName(name: string, headers: MlHeaders): Promise<string | undefined> {
+  // 1. Look for an existing group with this exact name.
+  try {
+    const res = await fetch('https://connect.mailerlite.com/api/groups?limit=100', { headers });
+    const body = await res.text();
+    if (res.ok) {
+      const groups: any[] = JSON.parse(body)?.data || [];
+      const match = groups.find(g => g?.name === name);
+      if (match?.id) {
+        console.log(`[ML] group "${name}" found: ${match.id}`);
+        return String(match.id);
+      }
+    } else {
+      console.error(`[ML] group list → ${res.status}:`, body.slice(0, 300));
+    }
+  } catch (err) {
+    console.error('[ML] group list threw:', err);
+  }
+  // 2. Not found — create it.
+  try {
+    const res = await fetch('https://connect.mailerlite.com/api/groups', {
+      method: 'POST', headers, body: JSON.stringify({ name }),
+    });
+    const body = await res.text();
+    if (res.ok) {
+      const id = JSON.parse(body)?.data?.id;
+      console.log(`[ML] group "${name}" created: ${id}`);
+      return id ? String(id) : undefined;
+    }
+    console.error(`[ML] group create "${name}" → ${res.status}:`, body.slice(0, 300));
+  } catch (err) {
+    console.error(`[ML] group create "${name}" threw:`, err);
+  }
+  return undefined;
+}
+
 // ─── MailerLite helper ────────────────────────────────────────────────────────
 // Two-step approach:
 //   1. POST /api/subscribers      → create or upsert the subscriber (+ fields)
-//   2. POST /api/subscribers/{id}/groups/{groupId} → EXPLICITLY assign to group
+//   2. POST /api/subscribers/{id}/groups/{groupId} → EXPLICITLY assign to group(s)
 // Step 2 is necessary because the `groups` array in step 1 is unreliable for
 // existing subscribers (MailerLite quirk — only honoured on first creation).
+// We assign to the master group AND the tier-specific group; the tier group is
+// what each per-tier welcome automation triggers on.
 async function addToMailerLite(
   email: string, name: string, pdfUrl: string,
-  extras: { company?: string; role?: string; industry?: string; companySize?: string }
+  extras: { company?: string; role?: string; industry?: string; companySize?: string; tier?: string }
 ) {
   const apiKey = process.env.MAILERLITE_API_KEY;
   console.log('[ML] starting; key present:', !!apiKey, 'key length:', (apiKey || '').length, 'group:', MAILERLITE_GROUP_ID);
@@ -538,23 +607,26 @@ async function addToMailerLite(
     return;
   }
 
-  // ── Step 2: EXPLICITLY assign the subscriber to the group ──────────────
+  // ── Step 2: EXPLICITLY assign the subscriber to the group(s) ───────────
   // This is the key fix — the upsert above silently ignores the groups[]
   // array when updating an existing subscriber. Without this call the
-  // subscriber gets created/updated but never lands in "AI Assessment Leads".
-  const GROUP_URL = `https://connect.mailerlite.com/api/subscribers/${subscriberId}/groups/${MAILERLITE_GROUP_ID}`;
-  console.log('[ML] POST', GROUP_URL);
-  try {
-    const res = await fetch(GROUP_URL, { method: 'POST', headers });
-    const bodyText = await res.text();
-    console.log(`[ML] POST /subscribers/{id}/groups/{groupId} → ${res.status}:`, bodyText.slice(0, 800));
-    if (res.ok) {
-      console.log(`[ML] ✓ subscriber ${subscriberId} explicitly assigned to group ${MAILERLITE_GROUP_ID}`);
-    } else if (res.status === 404) {
-      console.error(`[ML] 404 — group ${MAILERLITE_GROUP_ID} or subscriber ${subscriberId} not found. Verify the group ID.`);
+  // subscriber gets created/updated but never lands in the group.
+
+  // 2a. Master group — catch-all list of every quiz lead.
+  await assignToGroup(subscriberId, MAILERLITE_GROUP_ID, headers);
+
+  // 2b. Tier group — drives the per-tier welcome automation. Resolved by name
+  //     (created on first use) so we don't have to hard-code three more IDs.
+  const tierGroupName = extras.tier ? MAILERLITE_TIER_GROUPS[extras.tier] : undefined;
+  if (tierGroupName) {
+    const tierGroupId = await resolveGroupIdByName(tierGroupName, headers);
+    if (tierGroupId) {
+      await assignToGroup(subscriberId, tierGroupId, headers);
+    } else {
+      console.error(`[ML] could not resolve/create tier group "${tierGroupName}" — subscriber not tiered.`);
     }
-  } catch (err) {
-    console.error('[ML] group-assign call threw:', err);
+  } else if (extras.tier) {
+    console.error(`[ML] unknown tier "${extras.tier}" — no matching group name.`);
   }
 }
 
@@ -651,17 +723,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const buffer = await renderToBuffer(
       buildPdf({ name, score, maxScore, tier, tierColor, date, sections, company, role, industry, companySize, logoSrc }) as any
     );
-    // Branded filename. The blob path gets a random suffix from Vercel for
-    // uniqueness, but Content-Disposition controls what the browser actually
-    // suggests when the user saves the file — that's what we make pretty.
-    const slug = name.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    // Branded filename. Vercel Blob derives the browser's save-as filename from
+    // the pathname's final segment (it appends a random suffix to the URL only,
+    // not to the Content-Disposition name), so we make the pathname itself the
+    // pretty, branded name. addRandomSuffix stays on (default) for unique URLs.
     const titleName = name.trim().replace(/\s+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).replace(/\s+/g, '-').replace(/[^A-Za-z0-9-]/g, '');
     const isoDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-    const downloadName = `ChiefAIOfficer-AI-Readiness-Report-${titleName || 'Respondent'}-${isoDate}.pdf`;
-    const { url } = await put(`reports/ai-readiness-report-${slug}-${Date.now()}.pdf`, buffer, {
+    const downloadName = `ChiefAIOfficer-AI-Readiness-Report-${titleName || 'Respondent'}-${isoDate}`;
+    const { url } = await put(`reports/${downloadName}.pdf`, buffer, {
       access: 'public',
       contentType: 'application/pdf',
-      contentDisposition: `inline; filename="${downloadName}"`,
     });
     pdfUrl = url;
     console.log('PDF generated:', pdfUrl);
@@ -681,7 +752,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (attribution?.referer)     utmFields.referer      = attribution.referer;
 
   await Promise.allSettled([
-    addToMailerLite(email, name, pdfUrl, { company, role, industry, companySize }),
+    addToMailerLite(email, name, pdfUrl, { company, role, industry, companySize, tier }),
     fetch(GHL_WEBHOOK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
