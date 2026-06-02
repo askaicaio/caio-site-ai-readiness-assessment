@@ -631,6 +631,50 @@ async function addToMailerLite(
   }
 }
 
+// ─── Motherboard completion ping ────────────────────────────────────────────
+// Fire-and-forget server-side ping so motherboard sees every quiz completion
+// (not just UTM-tagged visits, which is what the client-side ping covers).
+// Includes `edition` so the CAIO and Scaling Up audiences can be filtered
+// separately in the motherboard dashboard. Silently no-ops if the env var
+// isn't set, so this is safe to ship before motherboard is wired up.
+async function pingMotherboardCompletion(payload: {
+  name: string; email: string; edition: 'caio' | 'scaling-up';
+  score: number; maxScore: number; pct: number; tier: string;
+  pdfUrl: string; attribution?: Attribution;
+}) {
+  const base = process.env.MOTHERBOARD_WEBHOOK_URL?.trim().replace(/\/$/, '');
+  if (!base) {
+    console.log('[MB] MOTHERBOARD_WEBHOOK_URL not set — skipping completion ping.');
+    return;
+  }
+  const url = `${base}?event=quiz_completion`;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...payload,
+        // Flatten attribution to top-level UTM fields for motherboard's schema.
+        utm_source:   payload.attribution?.utmSource,
+        utm_medium:   payload.attribution?.utmMedium,
+        utm_campaign: payload.attribution?.utmCampaign,
+        utm_content:  payload.attribution?.utmContent,
+        utm_term:     payload.attribution?.utmTerm,
+        referer:      payload.attribution?.referer,
+        capturedAt:   new Date().toISOString(),
+      }),
+    });
+    if (res.ok) {
+      console.log(`[MB] ✓ completion ping sent for ${payload.email} (edition=${payload.edition})`);
+    } else {
+      const body = await res.text();
+      console.error(`[MB] ${res.status}:`, body.slice(0, 300));
+    }
+  } catch (err) {
+    console.error('[MB] ping threw:', err);
+  }
+}
+
 // ─── Resend (Scaling Up confirmation email) ─────────────────────────────────
 // The /scaling-up edition bypasses MailerLite and sends a single branded
 // confirmation email directly via Resend, with the score, tier, report link,
@@ -937,7 +981,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ? sendScalingUpConfirmation({ to: email, name, score, maxScore, tier, pdfUrl })
     : addToMailerLite(email, name, pdfUrl, { company, role, industry, companySize, tier });
 
-  await Promise.allSettled([ghlPost, emailSide]);
+  // Server-side completion ping to motherboard for live monitoring (both
+  // editions). The client-side visit ping only fires on UTM-tagged traffic;
+  // this catches every completion regardless of how they arrived.
+  const motherboardPing = pingMotherboardCompletion({
+    name, email,
+    edition: isScalingUp ? 'scaling-up' : 'caio',
+    score, maxScore, pct, tier, pdfUrl, attribution,
+  });
+
+  await Promise.allSettled([ghlPost, emailSide, motherboardPing]);
 
   return res.status(200).json({ success: true, pdfUrl });
 }
