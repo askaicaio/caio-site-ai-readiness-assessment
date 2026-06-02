@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { getAIAssessment } from '../services/claudeService';
 import { readAttribution } from '../services/attribution';
+import { track, identify } from '../services/analytics';
 import { Answers } from '../types';
 
 interface ResultsProps {
@@ -274,6 +275,20 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
     setPhase('generating');
     setError('');
 
+    const percentage = maxScore > 0 ? (score / maxScore) * 100 : 0;
+    const tier = percentage > 75 ? 'Leader' : percentage > 40 ? 'Adopter' : 'Explorer';
+
+    // Identify the user in PostHog and fire form-submit event before we kick
+    // off the long-running report generation, so the event lands even if the
+    // user navigates away while it streams.
+    identify(email, { name, company, role, industry, companySize, source });
+    track('quiz_form_submitted', {
+      source, tier, score, maxScore,
+      hasCompany: !!company, hasRole: !!role, hasIndustry: !!industry,
+      hasCompanySize: !!companySize, hasPrimaryGoals: primaryGoals.length > 0,
+      hasChallenge: !!biggestChallenge, hasAiTools: !!aiTools,
+    });
+
     const context = {
       company, role, industry, companySize,
       primaryGoal: primaryGoals.join(', '),
@@ -313,9 +328,13 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
         }),
       });
       const data = await res.json();
-      if (data.pdfUrl) setPdfUrl(data.pdfUrl);
+      if (data.pdfUrl) {
+        setPdfUrl(data.pdfUrl);
+        track('quiz_report_delivered', { source, tier, hasPdf: true });
+      }
     } catch (err) {
       console.error('Capture error:', err);
+      track('quiz_report_delivered', { source, tier, hasPdf: false, error: true });
     }
 
     setPhase('complete');
@@ -347,6 +366,7 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
               href={pdfUrl}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={() => track('quiz_report_downloaded', { source, tier })}
               className="btn-primary flex items-center justify-center gap-2 w-full"
             >
               <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -369,6 +389,39 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
               <h3 className="display-2 mt-2">AI Readiness Report</h3>
             </div>
             <ReportRenderer markdown={streamedReport} />
+          </div>
+
+          {/* Next-step CTA — prominent booking ask after the user has read their report */}
+          <div
+            className="text-left p-7 sm:p-8 rounded-2xl relative overflow-hidden"
+            style={{
+              background:
+                'linear-gradient(135deg, rgba(99,102,241,0.12), rgba(99,102,241,0.04))',
+              border: '1px solid rgba(129,140,248,0.25)',
+            }}
+          >
+            <div
+              aria-hidden="true"
+              className="absolute -top-24 -right-24 w-64 h-64 rounded-full pointer-events-none"
+              style={{ background: 'radial-gradient(circle, rgba(129,140,248,0.18), transparent 70%)' }}
+            />
+            <span className="kicker text-indigo-300 relative">Your Next Step</span>
+            <h3 className="display-2 mt-2.5 relative">
+              Turn this report into a <span className="accent-italic">plan</span>.
+            </h3>
+            <p className="lead mt-3 mb-6 max-w-md text-[15px] relative">
+              Your AI Readiness Report tells you <em>where you stand</em>. A 30-minute Strategy Briefing with our team tells you <em>exactly what to do about it</em> — tailored to your business. Complimentary.
+            </p>
+            <a
+              href="https://api.leadconnectorhq.com/widget/bookings/b2b-executive-briefing"
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => track('quiz_booking_clicked', { source, tier })}
+              className="btn-primary inline-flex items-center gap-2 relative"
+            >
+              <span>Book Your AI Strategy Briefing</span>
+              <span aria-hidden="true">→</span>
+            </a>
           </div>
         </div>
       );

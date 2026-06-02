@@ -1,10 +1,12 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import { SURVEY_QUESTIONS, MAX_SCORE } from './constants';
 import { Answers, Question } from './types';
 import { ProgressBar } from './components/ProgressBar';
 import { QuestionCard } from './components/QuestionCard';
 import { Results } from './components/Results';
 import { captureAttributionFromUrl, pingQuizVisit } from './services/attribution';
+import { track } from './services/analytics';
 
 // Two flavors of the assessment live in the same app, differentiated only by
 // URL path. /scaling-up is the partner edition (different GHL routing, direct
@@ -27,15 +29,21 @@ const App: React.FC = () => {
   // Capture UTM attribution once on mount and (if utm_source is present)
   // ping motherboard so we count the click. The capture persists in
   // sessionStorage so Results.tsx can pick it up at completion time.
+  // Also fires the funnel-top PostHog events.
   useEffect(() => {
     const attribution = captureAttributionFromUrl();
+    track('quiz_landing_viewed', { source, utm_source: attribution.utmSource, utm_campaign: attribution.utmCampaign });
+    track('quiz_started', { source });
     if (attribution.utmSource) {
       void pingQuizVisit(attribution);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleAnswerChange = useCallback((id: string, value: string) => {
     setAnswers(prev => ({ ...prev, [id]: value }));
+    track('quiz_question_answered', { questionId: id, source });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleNext = () => {
@@ -71,13 +79,17 @@ const App: React.FC = () => {
     const finalScore = calculateScore();
     setScore(finalScore);
     setShowResults(true);
+    const pct = MAX_SCORE > 0 ? (finalScore / MAX_SCORE) * 100 : 0;
+    const tier = pct > 75 ? 'Leader' : pct > 40 ? 'Adopter' : 'Explorer';
+    track('quiz_completed', { source, score: finalScore, maxScore: MAX_SCORE, tier, pct: Math.round(pct) });
   };
-  
+
   const handleRestart = () => {
     setCurrentStep(0);
     setAnswers({});
     setShowResults(false);
     setScore(0);
+    track('quiz_restarted', { source });
   }
 
   const currentQuestion: Question = SURVEY_QUESTIONS[currentStep];
@@ -135,6 +147,7 @@ const App: React.FC = () => {
           </div>
         )}
       </main>
+      <Analytics />
     </div>
   );
 };
