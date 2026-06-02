@@ -83,37 +83,35 @@ const App: React.FC = () => {
   const currentQuestion: Question = SURVEY_QUESTIONS[currentStep];
 
   const renderHeader = () => (
-    <div className="text-center mb-8 max-w-3xl mx-auto">
-      <img src="/logo.png" alt="ChiefAIOfficer.com in partnership with Scaling Up" className="mx-auto mb-6 h-12 w-auto" />
+    <div className="text-center mb-12 max-w-3xl mx-auto">
+      <img
+        src="/logo.png"
+        alt="ChiefAIOfficer.com in partnership with Scaling Up"
+        className="mx-auto mb-10 h-9 sm:h-10 w-auto opacity-90"
+      />
       {isScalingUp && (
-        <div className="inline-block mb-4 px-3 py-1 rounded-full bg-indigo-900/40 border border-indigo-600/60">
-          <span className="text-xs uppercase tracking-widest text-indigo-300 font-semibold">
-            For the Scaling Up community
-          </span>
+        <div className="inline-flex items-center gap-2 mb-6 px-3.5 py-1.5 rounded-full border border-indigo-400/25 bg-indigo-400/[0.06]">
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-400" style={{ boxShadow: '0 0 10px rgba(129,140,248,0.7)' }}></span>
+          <span className="kicker text-indigo-200">For the Scaling Up Community</span>
         </div>
       )}
-      <h1 className="text-4xl sm:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-500">
+      <h1 className="display-1">
         {isScalingUp ? 'AI Readiness Assessment' : 'Practical AI Assessment'}
       </h1>
-      <p className="mt-4 text-lg text-gray-300">
-        {isScalingUp
-          ? 'An exclusive 3-minute diagnostic for Scaling Up members. Get your personalised report — and a clear next step — instantly.'
-          : "This brief assessment helps us tailor the session to your organization's AI journey."}
+      <p className="lead mt-5 max-w-xl mx-auto">
+        {isScalingUp ? (
+          <>
+            An <span className="accent-italic">exclusive</span> 3-minute diagnostic for Scaling Up members. Get a personalised report — and a clear next step — instantly.
+          </>
+        ) : (
+          <>A 3-minute diagnostic of where your organisation actually stands on AI — mapped to the businesses pulling ahead.</>
+        )}
       </p>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-4 sm:p-6 transition-colors duration-500">
-      <style>{`
-        .animate-fade-in {
-          animation: fadeIn 0.5s ease-in-out;
-        }
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
+    <div className="min-h-screen flex flex-col items-center justify-center px-4 sm:px-6 py-10 sm:py-16">
       <main className="w-full">
         {showResults ? (
           <Results score={score} maxScore={MAX_SCORE} answers={answers} onRestart={handleRestart} source={source} />
