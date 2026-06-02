@@ -8,6 +8,12 @@ interface ResultsProps {
   maxScore: number;
   answers: Answers;
   onRestart: () => void;
+  /**
+   * Which edition of the assessment this submission came from.
+   * Drives backend behaviour in /api/capture (which GHL webhook, whether
+   * MailerLite is used, whether Resend sends the confirmation email).
+   */
+  source?: 'caio' | 'scaling-up';
 }
 
 const ROLES = [
@@ -177,7 +183,7 @@ const GeneratingIndicator: React.FC<{ streamedText: string }> = ({ streamedText 
 // ─── Main component ───────────────────────────────────────────────────────────
 type Phase = 'form' | 'generating' | 'complete';
 
-export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRestart }) => {
+export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRestart, source = 'caio' }) => {
   const [phase, setPhase] = useState<Phase>('form');
   const [streamedReport, setStreamedReport] = useState('');
   const [pdfUrl, setPdfUrl]               = useState('');
@@ -242,6 +248,10 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
           // Surfaces on the GHL contact + motherboard campaign so we can tell
           // which marketing channel/email actually delivered the lead.
           attribution,
+          // Which edition the submission came from. The backend uses this to
+          // pick the right GHL webhook, skip MailerLite for partner editions,
+          // and send the confirmation email directly via Resend instead.
+          source,
         }),
       });
       const data = await res.json();

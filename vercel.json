@@ -6,5 +6,8 @@
     "api/capture.ts": {
       "includeFiles": "public/logo.png"
     }
-  }
+  },
+  "rewrites": [
+    { "source": "/scaling-up", "destination": "/index.html" }
+  ]
 }

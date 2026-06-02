@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { SURVEY_QUESTIONS, MAX_SCORE } from './constants';
 import { Answers, Question } from './types';
 import { ProgressBar } from './components/ProgressBar';
@@ -6,11 +6,23 @@ import { QuestionCard } from './components/QuestionCard';
 import { Results } from './components/Results';
 import { captureAttributionFromUrl, pingQuizVisit } from './services/attribution';
 
+// Two flavors of the assessment live in the same app, differentiated only by
+// URL path. /scaling-up is the partner edition (different GHL routing, direct
+// Resend confirmation email — no MailerLite). Everything else is the default
+// CAIO edition.
+export type QuizSource = 'caio' | 'scaling-up';
+const detectSource = (): QuizSource =>
+  typeof window !== 'undefined' && window.location.pathname.startsWith('/scaling-up')
+    ? 'scaling-up'
+    : 'caio';
+
 const App: React.FC = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState<Answers>({});
   const [showResults, setShowResults] = useState(false);
   const [score, setScore] = useState(0);
+  const source: QuizSource = useMemo(detectSource, []);
+  const isScalingUp = source === 'scaling-up';
 
   // Capture UTM attribution once on mount and (if utm_source is present)
   // ping motherboard so we count the click. The capture persists in
@@ -73,11 +85,20 @@ const App: React.FC = () => {
   const renderHeader = () => (
     <div className="text-center mb-8 max-w-3xl mx-auto">
       <img src="/logo.png" alt="ChiefAIOfficer.com in partnership with Scaling Up" className="mx-auto mb-6 h-12 w-auto" />
+      {isScalingUp && (
+        <div className="inline-block mb-4 px-3 py-1 rounded-full bg-indigo-900/40 border border-indigo-600/60">
+          <span className="text-xs uppercase tracking-widest text-indigo-300 font-semibold">
+            For the Scaling Up community
+          </span>
+        </div>
+      )}
       <h1 className="text-4xl sm:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-500">
-        Practical AI Assessment
+        {isScalingUp ? 'AI Readiness Assessment' : 'Practical AI Assessment'}
       </h1>
       <p className="mt-4 text-lg text-gray-300">
-        This brief assessment helps us tailor the session to your organization's AI journey.
+        {isScalingUp
+          ? 'An exclusive 3-minute diagnostic for Scaling Up members. Get your personalised report — and a clear next step — instantly.'
+          : "This brief assessment helps us tailor the session to your organization's AI journey."}
       </p>
     </div>
   );
@@ -95,7 +116,7 @@ const App: React.FC = () => {
       `}</style>
       <main className="w-full">
         {showResults ? (
-          <Results score={score} maxScore={MAX_SCORE} answers={answers} onRestart={handleRestart} />
+          <Results score={score} maxScore={MAX_SCORE} answers={answers} onRestart={handleRestart} source={source} />
         ) : (
           <div className="w-full max-w-2xl mx-auto">
             {renderHeader()}

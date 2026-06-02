@@ -5,6 +5,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { Document, Page, Text, View, StyleSheet, Image, Link, Svg, Defs, RadialGradient, Stop, Rect } from '@react-pdf/renderer';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { put } from '@vercel/blob';
+import { Resend } from 'resend';
 
 export const config = { maxDuration: 30 };
 
@@ -630,6 +631,139 @@ async function addToMailerLite(
   }
 }
 
+// ─── Resend (Scaling Up confirmation email) ─────────────────────────────────
+// The /scaling-up edition bypasses MailerLite and sends a single branded
+// confirmation email directly via Resend, with the score, tier, report link,
+// and the AI Strategy Briefing CTA. Anna wants Dani/Kathryn to own follow-up
+// from inside GHL — this email is just the immediate "here's your report"
+// touch, not a nurture sequence.
+async function sendScalingUpConfirmation(args: {
+  to: string; name: string; score: number; maxScore: number;
+  tier: string; pdfUrl: string;
+}) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.error('[Resend] RESEND_API_KEY not set — skipping confirmation email.');
+    return;
+  }
+  const from = process.env.RESEND_FROM_EMAIL
+    || 'ChiefAIOfficer.com <assessment@chiefaiofficer.com>';
+
+  const pct = Math.round((args.score / args.maxScore) * 100);
+  const firstName = (args.name.trim().split(/\s+/)[0]) || args.name;
+  const tierColor =
+    args.tier === 'Leader'  ? '#16a34a' :
+    args.tier === 'Adopter' ? '#2563eb' : '#d97706';
+  const tierBlurb =
+    args.tier === 'Leader'
+      ? "You're operating at the frontier of AI adoption. The focus now is on compounding your advantage — before competitors close the gap."
+      : args.tier === 'Adopter'
+      ? "You're making meaningful progress with AI, but there are critical gaps holding back real business impact. The right roadmap can close them quickly."
+      : "You're at the starting line of your AI journey — which is actually an advantage. You can avoid the costly mistakes early adopters made and build AI the right way.";
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your AI Readiness Results Are In</title>
+</head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1f2937;">
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f3f4f6;">
+    <tr><td align="center" style="padding:32px 16px;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:580px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+        <tr><td style="padding:22px 32px;background:#1e1b4b;text-align:center;">
+          <div style="color:#a5b4fc;font-size:11px;letter-spacing:2px;font-weight:600;text-transform:uppercase;">ChiefAIOfficer.com &nbsp;·&nbsp; In partnership with Scaling Up</div>
+        </td></tr>
+        <tr><td style="padding:32px;">
+          <h1 style="margin:0 0 14px;font-size:22px;font-weight:700;color:#1e1b4b;line-height:1.3;">Your AI Readiness Report is ready</h1>
+          <p style="margin:0 0 22px;font-size:15px;line-height:1.6;color:#374151;">Hi ${escapeHtml(firstName)},</p>
+          <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#374151;">Thanks for taking the assessment. Here's exactly where you stand:</p>
+
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:10px;margin:0 0 24px;">
+            <tr><td style="padding:24px;text-align:center;">
+              <div style="font-size:11px;color:#4f46e5;letter-spacing:1.5px;font-weight:700;text-transform:uppercase;margin-bottom:8px;">Your Score</div>
+              <div style="font-size:42px;font-weight:800;color:#1e1b4b;line-height:1;margin-bottom:4px;">${args.score}<span style="font-size:20px;color:#6b7280;font-weight:500;">/${args.maxScore}</span></div>
+              <div style="font-size:12px;color:#6b7280;margin:6px 0 12px;">${pct}% &nbsp;·&nbsp; AI Readiness</div>
+              <div style="display:inline-block;background:${tierColor};color:#ffffff;padding:7px 18px;border-radius:999px;font-size:13px;font-weight:600;letter-spacing:0.5px;">${escapeHtml(args.tier)} tier</div>
+            </td></tr>
+          </table>
+
+          <p style="margin:0 0 28px;font-size:15px;line-height:1.6;color:#374151;">${escapeHtml(tierBlurb)}</p>
+
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+            <tr><td align="center" style="padding-bottom:6px;">
+              <a href="${args.pdfUrl}" style="display:inline-block;padding:14px 30px;background:#4f46e5;color:#ffffff;text-decoration:none;font-weight:600;border-radius:8px;font-size:15px;">View Your Full Report (PDF)</a>
+            </td></tr>
+          </table>
+
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:32px 0 0;">
+            <tr><td style="border-top:1px solid #e5e7eb;padding-top:28px;">
+              <h2 style="margin:0 0 12px;font-size:18px;font-weight:700;color:#1e1b4b;">Ready to act on it?</h2>
+              <p style="margin:0 0 22px;font-size:15px;line-height:1.6;color:#374151;">Your report outlines the priorities. The fastest next step is a complimentary <b>AI Strategy Briefing</b> — a 30-minute call where we look at your specific business and show you what building a real AI system would look like.</p>
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                <tr><td align="center">
+                  <a href="${BOOKING_URL}" style="display:inline-block;padding:14px 30px;background:#1e1b4b;color:#ffffff;text-decoration:none;font-weight:600;border-radius:8px;font-size:15px;">Book Your AI Strategy Briefing</a>
+                </td></tr>
+              </table>
+            </td></tr>
+          </table>
+        </td></tr>
+        <tr><td style="padding:20px 32px;background:#f9fafb;border-top:1px solid #e5e7eb;text-align:center;">
+          <p style="margin:0;font-size:12px;color:#6b7280;line-height:1.5;">ChiefAIOfficer.com &nbsp;·&nbsp; In partnership with Scaling Up<br>You received this because you completed the AI Readiness Assessment.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  const text = [
+    `Hi ${firstName},`,
+    ``,
+    `Your AI Readiness Report is ready.`,
+    ``,
+    `Your score: ${args.score}/${args.maxScore} (${pct}%) — ${args.tier} tier`,
+    ``,
+    tierBlurb,
+    ``,
+    `View your full report:`,
+    args.pdfUrl,
+    ``,
+    `------------------------------------------------------------`,
+    ``,
+    `Ready to act on it?`,
+    ``,
+    `Your report outlines the priorities. The fastest next step is a complimentary AI Strategy Briefing — a 30-minute call where we look at your specific business and show you what building a real AI system would look like.`,
+    ``,
+    `Book your AI Strategy Briefing:`,
+    BOOKING_URL,
+    ``,
+    `—`,
+    `ChiefAIOfficer.com · In partnership with Scaling Up`,
+  ].join('\n');
+
+  try {
+    const resend = new Resend(apiKey);
+    const { data, error } = await resend.emails.send({
+      from, to: args.to,
+      subject: 'Your AI Readiness Results Are In',
+      html, text,
+    });
+    if (error) {
+      console.error('[Resend] send error:', error);
+    } else {
+      console.log(`[Resend] ✓ confirmation sent to ${args.to} (id=${data?.id ?? '?'})`);
+    }
+  } catch (err) {
+    console.error('[Resend] threw:', err);
+  }
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 // ─── Attribution helpers ────────────────────────────────────────────────────
 // Every quiz completion gets a STANDARD tag so motherboard's "AI Readiness
 // Quiz" campaign can pull all of them with one rule. On top of that we
@@ -703,11 +837,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     name, email, score, maxScore, fullReport,
     company, role, industry, companySize,
     attribution,
+    source,
   } = req.body as {
     name: string; email: string; score: number; maxScore: number; fullReport: string;
     company?: string; role?: string; industry?: string; companySize?: string;
     attribution?: Attribution;
+    // 'scaling-up' → partner edition (different GHL webhook, no MailerLite,
+    // Resend confirmation email). Anything else → default CAIO flow.
+    source?: 'caio' | 'scaling-up';
   };
+  const isScalingUp = source === 'scaling-up';
 
   if (!name || !email) return res.status(400).json({ error: 'Name and email required' });
 
@@ -741,7 +880,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Build tags from tier + attribution (see buildTagsFor for the full scheme).
+  // Add a human-readable "Edition" tag so GHL workflows can branch on which
+  // version of the assessment the lead came from, independent of UTMs.
   const tags = buildTagsFor(tier, attribution);
+  tags.push(`Edition: ${isScalingUp ? 'Scaling Up' : 'CAIO'}`);
 
   const utmFields: Record<string, string | undefined> = {};
   if (attribution?.utmSource)   utmFields.utm_source   = attribution.utmSource;
@@ -751,25 +893,51 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (attribution?.utmTerm)     utmFields.utm_term     = attribution.utmTerm;
   if (attribution?.referer)     utmFields.referer      = attribution.referer;
 
-  await Promise.allSettled([
-    addToMailerLite(email, name, pdfUrl, { company, role, industry, companySize, tier }),
-    fetch(GHL_WEBHOOK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name, email, company, role, industry, companySize,
-        customFields: {
-          aiReadinessScore: score, maxScore, scorePercentage: pct, tier,
-          assessmentDate: date, pdfUrl,
-          ...utmFields,
-        },
-        tags,
-        // Pass attribution at the top level too — some GHL workflow setups
-        // read from the body root rather than customFields
-        ...utmFields,
-      }),
-    }).catch(err => console.error('GHL error:', err)),
-  ]);
+  // ── Pick the GHL webhook ────────────────────────────────────────────────
+  // Scaling Up submissions route to a different webhook so Anna's team
+  // (Dani / Kathryn) get the assignment in GHL. If the dedicated env var
+  // isn't set yet, we fall back to the default webhook with a warning rather
+  // than silently dropping the lead.
+  let ghlUrl = GHL_WEBHOOK_URL;
+  if (isScalingUp) {
+    const suUrl = process.env.SCALING_UP_GHL_WEBHOOK_URL;
+    if (suUrl) {
+      ghlUrl = suUrl;
+    } else {
+      console.warn('[SU] SCALING_UP_GHL_WEBHOOK_URL not set — falling back to default GHL webhook.');
+    }
+  }
+
+  // ── Build the fan-out ───────────────────────────────────────────────────
+  const ghlBody = {
+    name, email, company, role, industry, companySize,
+    customFields: {
+      aiReadinessScore: score, maxScore, scorePercentage: pct, tier,
+      assessmentDate: date, pdfUrl,
+      edition: isScalingUp ? 'scaling-up' : 'caio',
+      ...utmFields,
+    },
+    tags,
+    edition: isScalingUp ? 'scaling-up' : 'caio',
+    // Pass attribution at the top level too — some GHL workflow setups
+    // read from the body root rather than customFields.
+    ...utmFields,
+  };
+
+  const ghlPost = fetch(ghlUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(ghlBody),
+  }).catch(err => console.error('GHL error:', err));
+
+  // Scaling Up: skip MailerLite, send the branded confirmation via Resend.
+  // Default: existing MailerLite tier-group flow (which fires its own welcome
+  // sequence — no Resend send needed).
+  const emailSide = isScalingUp
+    ? sendScalingUpConfirmation({ to: email, name, score, maxScore, tier, pdfUrl })
+    : addToMailerLite(email, name, pdfUrl, { company, role, industry, companySize, tier });
+
+  await Promise.allSettled([ghlPost, emailSide]);
 
   return res.status(200).json({ success: true, pdfUrl });
 }
