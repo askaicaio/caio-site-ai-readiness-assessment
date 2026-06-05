@@ -327,14 +327,14 @@ function buildPdf({ name, score, maxScore, tier, tierColor, date, sections, comp
       subMeta ? e(Text as any, { style: s.coverSubMeta }, subMeta) : null,
       e(Text as any, { style: s.coverDate }, date),
 
-      // Score box
+      // Score box — 0-100% scale (Josh). Big percentage on the left, tier
+      // pill on the right. Underlying scoring (1-4 pts per answer) unchanged.
       e(View as any, { style: s.coverScoreBox },
         e(View as any, { style: s.coverScoreRow },
-          e(Text as any, { style: s.coverScoreNum }, String(score)),
-          e(Text as any, { style: s.coverScoreSlash }, `/${maxScore}`),
+          e(Text as any, { style: s.coverScoreNum }, String(pct)),
+          e(Text as any, { style: s.coverScoreSlash }, '%'),
           e(View as any, { style: s.coverScoreMeta },
-            e(Text as any, { style: s.coverScoreLabel }, 'Overall Score'),
-            e(Text as any, { style: s.coverScorePct }, `${pct}%`),
+            e(Text as any, { style: s.coverScoreLabel }, 'AI Readiness Score'),
             e(View as any, { style: [s.coverTierPill, { backgroundColor: tierColor }] },
               e(Text as any, { style: s.coverTierText }, tier),
             ),
@@ -413,16 +413,16 @@ function buildPdf({ name, score, maxScore, tier, tierColor, date, sections, comp
         // Context strip (company / role / industry / size)
         ...(ctxRowEl ? [ctxRowEl] : []),
 
-        // Score card
+        // Score card — 0-100% scale (per Josh's feedback). The big number is
+        // the percentage; the smaller "%" sits beside it; the right column
+        // surfaces the tier without redundantly repeating the percentage.
         e(View as any, { style: s.scoreCard },
           e(View as any, { style: s.scoreRow },
-            e(Text as any, { style: s.scoreNum    }, String(score)),
-            e(Text as any, { style: s.scoreSlash  }, '/'),
-            e(Text as any, { style: s.scoreMaxNum }, String(maxScore)),
+            e(Text as any, { style: s.scoreNum    }, String(pct)),
+            e(Text as any, { style: s.scoreSlash  }, '%'),
             e(View as any, { style: s.scoreMeta },
-              e(Text as any, { style: s.scoreMetaLabel }, 'Overall Score'),
-              e(Text as any, { style: s.scorePct       }, `${pct}%`),
-              e(Text as any, { style: s.scoreTierLabel }, `${tier} — AI Readiness Tier`),
+              e(Text as any, { style: s.scoreMetaLabel }, 'AI Readiness Score'),
+              e(Text as any, { style: s.scoreTierLabel }, `${tier} Tier`),
             ),
           ),
           e(View as any, { style: s.barTrack },
@@ -726,10 +726,9 @@ async function sendScalingUpConfirmation(args: {
 
           <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:10px;margin:0 0 24px;">
             <tr><td style="padding:24px;text-align:center;">
-              <div style="font-size:11px;color:#4f46e5;letter-spacing:1.5px;font-weight:700;text-transform:uppercase;margin-bottom:8px;">Your Score</div>
-              <div style="font-size:42px;font-weight:800;color:#1e1b4b;line-height:1;margin-bottom:4px;">${args.score}<span style="font-size:20px;color:#6b7280;font-weight:500;">/${args.maxScore}</span></div>
-              <div style="font-size:12px;color:#6b7280;margin:6px 0 12px;">${pct}% &nbsp;·&nbsp; AI Readiness</div>
-              <div style="display:inline-block;background:${tierColor};color:#ffffff;padding:7px 18px;border-radius:999px;font-size:13px;font-weight:600;letter-spacing:0.5px;">${escapeHtml(args.tier)} tier</div>
+              <div style="font-size:11px;color:#4f46e5;letter-spacing:1.5px;font-weight:700;text-transform:uppercase;margin-bottom:8px;">AI Readiness Score</div>
+              <div style="font-size:48px;font-weight:800;color:#1e1b4b;line-height:1;margin-bottom:14px;">${pct}<span style="font-size:24px;color:#6b7280;font-weight:500;margin-left:2px;">%</span></div>
+              <div style="display:inline-block;background:${tierColor};color:#ffffff;padding:7px 18px;border-radius:999px;font-size:13px;font-weight:600;letter-spacing:0.5px;">${escapeHtml(args.tier)} Tier</div>
             </td></tr>
           </table>
 
@@ -767,7 +766,7 @@ async function sendScalingUpConfirmation(args: {
     ``,
     `Your AI Readiness Report is ready.`,
     ``,
-    `Your score: ${args.score}/${args.maxScore} (${pct}%) — ${args.tier} tier`,
+    `Your AI Readiness Score: ${pct}% — ${args.tier} tier`,
     ``,
     tierBlurb,
     ``,

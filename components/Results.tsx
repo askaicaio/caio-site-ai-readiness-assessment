@@ -101,8 +101,11 @@ function getTierConfig(percentage: number) {
 }
 
 // ─── Score gauge ──────────────────────────────────────────────────────────────
+// Display is a 0-100% scale (Josh's feedback). The underlying scoring (1-4
+// points per radio answer) is unchanged — we just normalise for display.
 const ScoreGauge: React.FC<{ score: number; maxScore: number }> = ({ score, maxScore }) => {
   const percentage = maxScore > 0 ? (score / maxScore) * 100 : 0;
+  const pctRounded = Math.round(percentage);
   const circumference = 2 * Math.PI * 55;
   const strokeDashoffset = circumference - (percentage / 100) * circumference;
   const { tier, accent, pillBg, pillText } = getTierConfig(percentage);
@@ -126,11 +129,15 @@ const ScoreGauge: React.FC<{ score: number; maxScore: number }> = ({ score, maxS
             }}
           />
         </svg>
-        {/* Centred score number; "out of N" absolutely positioned beneath it
-            so it doesn't shift the score upward. */}
+        {/* Centred score number (the percentage) + small "%" sign + "AI READINESS"
+            label beneath. Container only wraps the % so the visual centre stays
+            on the gauge's geometric centre. */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-          <span className="block text-[44px] font-semibold text-white leading-none text-center tabular tracking-tight">{score}</span>
-          <span className="absolute left-1/2 -translate-x-1/2 top-full mt-2 whitespace-nowrap text-[11px] text-slate-400 leading-none tracking-wider uppercase">out of {maxScore}</span>
+          <span className="block leading-none text-center text-white tabular tracking-tight">
+            <span className="text-[44px] font-semibold">{pctRounded}</span>
+            <span className="text-[22px] font-medium text-slate-400 align-top ml-0.5">%</span>
+          </span>
+          <span className="absolute left-1/2 -translate-x-1/2 top-full mt-2 whitespace-nowrap text-[10px] text-slate-400 leading-none tracking-[0.18em] uppercase font-semibold">AI Readiness</span>
         </div>
       </div>
       {/* Tier pill */}
@@ -212,32 +219,65 @@ const ReportRenderer: React.FC<{ markdown: string }> = ({ markdown }) => {
   );
 };
 
-// ─── Streaming progress indicator ────────────────────────────────────────────
-const GeneratingIndicator: React.FC<{ streamedText: string }> = ({ streamedText }) => (
-  <div className="mt-8 space-y-5 animate-fade-in">
-    <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-indigo-400/20 bg-indigo-400/[0.06]">
-      <span className="relative flex h-2 w-2 flex-shrink-0">
-        <span className="absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-70 animate-ping" />
-        <span className="relative inline-flex h-2 w-2 rounded-full bg-indigo-400" />
-      </span>
-      <p className="text-[13px] font-medium text-indigo-200 tracking-wide">
-        {streamedText ? 'Crafting your personalised assessment…' : 'Analysing your responses…'}
-      </p>
-    </div>
-    {streamedText && (
+// ─── Generating-state indicator ──────────────────────────────────────────────
+// Per Josh's feedback: we DO NOT stream the report to the page in real time.
+// Watching the model write feels less premium than seeing a polished, finished
+// report appear at once. Instead we show a calm progress card with a rotating
+// status line while the request completes server-side.
+const GeneratingIndicator: React.FC = () => {
+  // Cycle through a few status lines so the wait doesn't feel static. Times
+  // are approximate — the actual generation takes ~10-25s. If the report
+  // finishes faster, the user simply doesn't see later lines.
+  const phases = React.useMemo(() => [
+    'Analysing your responses…',
+    'Identifying patterns and opportunities…',
+    'Mapping your strategic risks…',
+    'Crafting your personalised report…',
+    'Finalising the recommendations…',
+  ], []);
+  const [phaseIdx, setPhaseIdx] = React.useState(0);
+
+  React.useEffect(() => {
+    const id = window.setInterval(
+      () => setPhaseIdx(i => Math.min(i + 1, phases.length - 1)),
+      4500,
+    );
+    return () => window.clearInterval(id);
+  }, [phases.length]);
+
+  return (
+    <div className="mt-8 animate-fade-in">
       <div
-        className="text-left p-7 rounded-2xl"
+        className="rounded-2xl p-7 sm:p-9 text-center"
         style={{
-          background: 'rgba(255,255,255,0.02)',
-          border: '1px solid rgba(255,255,255,0.06)',
+          background: 'linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015))',
+          border: '1px solid rgba(255,255,255,0.08)',
         }}
       >
-        <ReportRenderer markdown={streamedText} />
-        <span className="inline-block w-[2px] h-4 bg-indigo-400 animate-pulse ml-0.5 align-middle" />
+        {/* Pulsing concentric circles */}
+        <div className="relative inline-flex items-center justify-center mx-auto mb-5">
+          <span className="absolute w-20 h-20 rounded-full bg-indigo-400/10 animate-ping" style={{ animationDuration: '2.4s' }} />
+          <span className="absolute w-14 h-14 rounded-full bg-indigo-400/15 animate-ping" style={{ animationDuration: '2.4s', animationDelay: '0.6s' }} />
+          <span className="relative w-10 h-10 rounded-full bg-indigo-500/25 ring-1 ring-indigo-400/40 flex items-center justify-center">
+            <span className="w-3 h-3 rounded-full bg-indigo-300" style={{ boxShadow: '0 0 12px rgba(129,140,248,0.8)' }} />
+          </span>
+        </div>
+
+        <span className="kicker text-slate-500 block">Generating your report</span>
+        <h3 className="display-2 mt-2.5">We're polishing your AI Readiness Report</h3>
+        <p
+          key={phaseIdx /* re-mount on each phase so the fade animation triggers */}
+          className="lead mt-4 max-w-md mx-auto text-[15px] animate-fade-in"
+        >
+          {phases[phaseIdx]}
+        </p>
+        <p className="text-[12px] text-slate-500 mt-5">
+          This usually takes 15–30 seconds. A copy will also be emailed to you.
+        </p>
       </div>
-    )}
-  </div>
-);
+    </div>
+  );
+};
 
 // ─── Main component ───────────────────────────────────────────────────────────
 type Phase = 'form' | 'generating' | 'complete';
@@ -298,9 +338,10 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
 
     let fullReport = '';
     try {
-      fullReport = await getAIAssessment(score, maxScore, answers, (text) => {
-        setStreamedReport(text);
-      }, context);
+      // Per Josh's feedback: don't display the report as it streams. We still
+      // hit the streaming endpoint server-side (it's how the SDK works) but we
+      // do NOT push partial text into state — only the final result is shown.
+      fullReport = await getAIAssessment(score, maxScore, answers, undefined, context);
       setStreamedReport(fullReport);
     } catch (e: any) {
       setError(e.message || 'Failed to generate your report. Please try again.');
@@ -342,7 +383,7 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
 
   const renderContent = () => {
     if (phase === 'generating') {
-      return <GeneratingIndicator streamedText={streamedReport} />;
+      return <GeneratingIndicator />;
     }
 
     if (phase === 'complete') {
@@ -594,45 +635,45 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
     );
   };
 
-  // Score + tier are gated until the lead submits the email form. This
-  // lifts conversion (people can't peek + bounce) and matches typical
-  // lead-magnet best practice. In phase='form' we show a generic
-  // completion headline; the actual score gauge + tier reveal only
-  // appear once we're past the form (generating or complete).
-  const scoreUnlocked = phase !== 'form';
+  // Tri-state header:
+  //   form       → pre-unlock prompt (no score visible, just "you've finished")
+  //   generating → no header (the GeneratingIndicator owns the screen)
+  //   complete   → score gauge + tier reveal
+  // Per Josh: the score never appears on screen until the polished report is
+  // fully ready, so the "reveal" moment lands all at once.
 
   return (
     <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 animate-fade-in">
       <div className="card-premium p-7 sm:p-10">
 
-        {/* Header — copy + visual change depending on whether the score has been unlocked */}
-        <div className="text-center">
-          {scoreUnlocked ? (
-            <>
-              <span className="kicker text-slate-500">Your AI Readiness</span>
-              <h2 className="display-2 mt-2.5">Here's where you stand</h2>
-              <div className="my-9">
-                <ScoreGauge score={score} maxScore={maxScore} />
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-indigo-400/15 ring-1 ring-indigo-400/30">
-                <svg className="h-6 w-6 text-indigo-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-              <span className="kicker text-slate-500 block mt-6">Assessment Complete</span>
-              <h2 className="display-2 mt-2.5">You've finished.</h2>
-              <p className="lead mt-3 max-w-md mx-auto text-[15.5px]">
-                Enter your details below to unlock your AI Readiness Score, tier, and a personalised report delivered straight to your inbox.
-              </p>
-            </>
-          )}
-        </div>
+        {/* Header — only in form + complete phases */}
+        {phase === 'complete' && (
+          <div className="text-center">
+            <span className="kicker text-slate-500">Your AI Readiness</span>
+            <h2 className="display-2 mt-2.5">Here's where you stand</h2>
+            <div className="my-9">
+              <ScoreGauge score={score} maxScore={maxScore} />
+            </div>
+          </div>
+        )}
 
-        {/* Tier description — refined callout with a left accent bar */}
-        {scoreUnlocked && (
+        {phase === 'form' && (
+          <div className="text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-indigo-400/15 ring-1 ring-indigo-400/30">
+              <svg className="h-6 w-6 text-indigo-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <span className="kicker text-slate-500 block mt-6">Assessment Complete</span>
+            <h2 className="display-2 mt-2.5">You've finished.</h2>
+            <p className="lead mt-3 max-w-md mx-auto text-[15.5px]">
+              Enter your details below to unlock your AI Readiness Score, tier, and a personalised report delivered straight to your inbox.
+            </p>
+          </div>
+        )}
+
+        {/* Tier description callout — only after the full report is ready */}
+        {phase === 'complete' && (
           <div
             className="mt-2 rounded-xl px-5 py-4 text-[14px] leading-relaxed text-slate-300"
             style={{
@@ -650,14 +691,17 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
 
         {renderContent()}
 
-        <div className="mt-10 pt-6 text-center border-t border-white/[0.06]">
-          <button
-            onClick={onRestart}
-            className="text-[13px] text-slate-400 hover:text-white transition-colors"
-          >
-            Take the assessment again →
-          </button>
-        </div>
+        {/* "Take again" — hidden while generating so the wait state is clean */}
+        {phase !== 'generating' && (
+          <div className="mt-10 pt-6 text-center border-t border-white/[0.06]">
+            <button
+              onClick={onRestart}
+              className="text-[13px] text-slate-400 hover:text-white transition-colors"
+            >
+              Take the assessment again →
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

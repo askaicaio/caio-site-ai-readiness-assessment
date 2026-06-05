@@ -55,6 +55,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ? `This respondent is in the ADOPTER tier — the most dangerous middle ground. They have tools and people using them, but no system. The report's job is to name the specific shape of that gap (governance, measurement, single-points-of-failure), make the cost of staying here tangible, and show what the leap to Leader actually looks like operationally.`
       : `This respondent is in the EXPLORER tier — early in the journey. The report's job is to (a) validate that starting here is an advantage (they can avoid costly mistakes early adopters made), (b) make the cost of waiting concrete in months and dollars, and (c) give them a clear, narrow first move so the mountain feels climbable. Avoid overwhelm.`;
 
+  // Risk language exemplars — Josh's exact voice. The model should write NEW
+  // paragraphs in this register, not copy these; the examples teach tone.
+  const riskExemplar =
+    tier === 'Leader'
+      ? `EXAMPLE VOICE (do not copy verbatim — match the register, tailor to THIS respondent):
+        | Risk paragraph: "At your stage the risk isn't whether you're using AI — it's complacency. The companies pulling ahead from here aren't adopting AI; they're rebuilding their operating model around it. The temptation when you're already ahead is to coast. The window to convert your lead into a structural advantage is open right now, and it doesn't stay open."
+        | Advantage paragraph: "You have the foundations, the team, and the operating habit. The next leap isn't more tools — it's strategic clarity on where AI becomes a moat, not just a productivity gain. That's a different conversation than the one most companies your size are having."`
+      : tier === 'Adopter'
+      ? `EXAMPLE VOICE (do not copy verbatim — match the register, tailor to THIS respondent):
+        | Risk paragraph: "The middle ground you occupy is the most exposed position. You have pieces but no system, which means you carry most of the cost of AI adoption with very little of the leverage. The specific risk is governance debt — every department running its own experiment, no clear owner, no shared standards. That debt compounds quietly until it becomes a hire, a breach, or a board question you can't answer."
+        | Advantage paragraph: "You're not starting from zero. You have adoption muscle, working tools, and an organisation already comfortable with AI as part of work. What you need now is the connective tissue that turns those pieces into a system."`
+      : `EXAMPLE VOICE (do not copy verbatim — match the register, tailor to THIS respondent):
+        | Risk paragraph: "Your organisation is at the starting line of its AI journey, and right now that line is moving. Competitors are already compounding small AI gains into real cost and speed advantages, and the gap widens every quarter you stay unstructured. The bigger exposure is what happens when teams adopt AI on their own without a plan — it's already happening in most companies at your stage. Tools get bought twice, sensitive data flows into systems no one vetted, and people build workflows that quietly break the moment a vendor changes a feature. Unmanaged adoption doesn't mean no AI — it means AI you can't see, can't secure, and can't scale."
+        | Advantage paragraph: "The advantage you still hold is timing. You haven't locked in the expensive mistakes early movers made, and you can build AI into your strategy deliberately instead of cleaning it up later. That window is open now. It does not stay open."`;
+
   const prompt = `You are a Chief AI Officer writing a personalised assessment report for a senior decision-maker. The report is the company's premier marketing asset — its quality is what convinces multi-million-dollar businesses to book a strategy briefing.
 
 ═══ RESPONDENT SCORE ═══
@@ -66,6 +81,8 @@ ${relevantAnswers.map(item => `- ${item.questionText}\n  - Answer: ${item.answer
 
 ═══ TIER FRAMING — INTERNALISE THIS ═══
 ${tierFraming}
+
+${riskExemplar}
 
 ═══ WRITING RULES ═══
 1. SPECIFICITY. Every claim must cite their actual answer, their role, their industry, or their company size. If you'd say it to any business, don't say it.
@@ -80,7 +97,16 @@ ${tierFraming}
 
 ### Overall Assessment
 
-One sharp paragraph (3–5 sentences). State their tier, ground it in their context (role, industry, company size), and name the strategic question the rest of the report answers. This sets the tone — make it feel written specifically for them, not auto-generated.
+THREE short paragraphs, in this exact order. This is the most important section in the report — it has to land within the first ten seconds of reading.
+
+PARAGRAPH 1 — Context (3–4 sentences)
+State their tier and ground it specifically in their role, industry, and company size. Name the strategic question the rest of the report answers. Make it feel written for them.
+
+PARAGRAPH 2 — Risk (4–6 sentences)
+Articulate the biggest strategic risk they face given their current state. Be direct. Use timing and movement language. Name the second-order exposure (what happens that they're not seeing). NO HEDGING — write like someone who has seen this exact pattern in hundreds of companies. Match the register of the EXAMPLE VOICE provided above, tailored to THIS respondent's specifics. This is where you tell them the thing nobody else is telling them.
+
+PARAGRAPH 3 — Advantage (2–3 sentences)
+Name the leverage they still hold or the timing advantage available to them. This pivots from risk to action. Brief and confident.
 
 ### Key Strengths
 
