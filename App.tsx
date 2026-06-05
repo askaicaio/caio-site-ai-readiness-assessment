@@ -59,6 +59,9 @@ const App: React.FC = () => {
   };
 
   const calculateScore = useCallback(() => {
+    // Weighted sum: each selected option's score is multiplied by the
+    // question's weight (1x, 2x, or 3x). Questions without an explicit
+    // weight default to 1. See constants.ts for the rubric rationale.
     let totalScore = 0;
     SURVEY_QUESTIONS.forEach(question => {
       if (question.type === 'radio') {
@@ -66,7 +69,8 @@ const App: React.FC = () => {
         if (answer) {
           const option = question.options?.find(opt => opt.text === answer);
           if (option) {
-            totalScore += option.score;
+            const weight = question.weight ?? 1;
+            totalScore += option.score * weight;
           }
         }
       }
