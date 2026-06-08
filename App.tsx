@@ -5,6 +5,7 @@ import { Answers, Question } from './types';
 import { ProgressBar } from './components/ProgressBar';
 import { QuestionCard } from './components/QuestionCard';
 import { Results } from './components/Results';
+import { Review } from './components/Review';
 import { captureAttributionFromUrl, pingQuizVisit } from './services/attribution';
 import { track } from './services/analytics';
 
@@ -18,7 +19,26 @@ const detectSource = (): QuizSource =>
     ? 'scaling-up'
     : 'caio';
 
+const isReviewPath = (): boolean =>
+  typeof window !== 'undefined' && window.location.pathname.startsWith('/review');
+
+// Top-level App branches by path BEFORE any quiz-state hooks run so we
+// don't violate the rules of hooks when the review path is active.
 const App: React.FC = () => {
+  if (isReviewPath()) {
+    return (
+      <div className="min-h-screen">
+        <Review />
+        <Analytics />
+      </div>
+    );
+  }
+  return <Quiz />;
+};
+
+// The actual quiz lives in its own component so its hooks are isolated from
+// the review-path short-circuit above.
+const Quiz: React.FC = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState<Answers>({});
   const [showResults, setShowResults] = useState(false);

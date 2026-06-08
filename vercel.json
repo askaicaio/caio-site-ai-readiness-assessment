@@ -8,6 +8,7 @@
     }
   },
   "rewrites": [
-    { "source": "/scaling-up", "destination": "/index.html" }
+    { "source": "/scaling-up", "destination": "/index.html" },
+    { "source": "/review", "destination": "/index.html" }
   ]
 }
