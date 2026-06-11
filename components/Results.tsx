@@ -181,44 +181,6 @@ const selectCls =
   // chevron — light slate, embedded inline so we don't need an asset
   `bg-[url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")]`;
 
-const ReportRenderer: React.FC<{ markdown: string }> = ({ markdown }) => {
-  if (!markdown) return null;
-  const sections = markdown.split('### ').filter(s => s.trim());
-  return (
-    <div className="space-y-7">
-      {sections.map((section, index) => {
-        const lines = section.trim().split('\n');
-        const title = lines[0];
-        const contentLines = lines.slice(1).filter(l => l.trim());
-        const content = contentLines.join('\n');
-        const isNumberedList = /^\s*\d+\./m.test(content);
-        return (
-          <div key={index}>
-            <h3 className="text-[17px] font-semibold text-white mb-3 tracking-tight">{title}</h3>
-            {isNumberedList ? (
-              <ol className="space-y-2.5 text-[14.5px] leading-relaxed text-slate-300">
-                {contentLines.map((item, i) => {
-                  const cleanItem = item.replace(/^\s*\d+\.\s*/, '');
-                  const num = (item.match(/^\s*(\d+)\./) || [])[1] || String(i + 1);
-                  return (
-                    <li key={i} className="flex gap-3">
-                      <span className="flex-shrink-0 inline-flex items-center justify-center w-5 h-5 rounded-full bg-indigo-500/15 text-indigo-300 text-[11px] font-semibold tabular mt-0.5">{num}</span>
-                      <span className="flex-1" dangerouslySetInnerHTML={{ __html: cleanItem.replace(/\*\*(.*?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>') }} />
-                    </li>
-                  );
-                })}
-              </ol>
-            ) : (
-              <p className="text-[14.5px] leading-relaxed text-slate-300"
-                 dangerouslySetInnerHTML={{ __html: content.replace(/\*\*(.*?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>').replace(/\n/g, '<br />') }} />
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-};
-
 // ─── Generating-state indicator ──────────────────────────────────────────────
 // Per Josh's feedback: we DO NOT stream the report to the page in real time.
 // Watching the model write feels less premium than seeing a polished, finished
@@ -284,7 +246,6 @@ type Phase = 'form' | 'generating' | 'complete';
 
 export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRestart, source = 'caio' }) => {
   const [phase, setPhase] = useState<Phase>('form');
-  const [streamedReport, setStreamedReport] = useState('');
   const [pdfUrl, setPdfUrl]               = useState('');
   const [error, setError]                 = useState('');
 
@@ -338,11 +299,11 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
 
     let fullReport = '';
     try {
-      // Per Josh's feedback: don't display the report as it streams. We still
-      // hit the streaming endpoint server-side (it's how the SDK works) but we
-      // do NOT push partial text into state — only the final result is shown.
+      // The report is never rendered to the page (Josh's feedback + the user's
+      // request to gate results entirely). We still need the full text here so
+      // we can pass it to /api/capture for the PDF + the email — but it lives
+      // only in this local variable, not in component state.
       fullReport = await getAIAssessment(score, maxScore, answers, undefined, context);
-      setStreamedReport(fullReport);
     } catch (e: any) {
       setError(e.message || 'Failed to generate your report. Please try again.');
       setPhase('form');
@@ -389,19 +350,21 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
     if (phase === 'complete') {
       return (
         <div className="mt-8 space-y-5 animate-fade-in">
-          {/* Success confirmation — refined, subtler */}
-          <div className="flex items-start gap-3 px-4 py-3 rounded-xl border border-emerald-400/20 bg-emerald-400/[0.06]">
+          {/* Success confirmation — points the user to their inbox + the
+              download button. The report itself is NOT rendered on-page, so
+              the only ways to read it are (a) the PDF and (b) the email. */}
+          <div className="flex items-start gap-3 px-4 py-3.5 rounded-xl border border-emerald-400/20 bg-emerald-400/[0.06]">
             <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-400/15 mt-px flex-shrink-0">
               <svg className="w-3 h-3 text-emerald-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
             </span>
-            <p className="text-[13px] leading-relaxed text-emerald-100/90">
-              Thanks, <span className="text-white font-medium">{name}</span>. Your report is below and a copy is on its way to <span className="text-white font-medium">{email}</span>.
+            <p className="text-[13.5px] leading-relaxed text-emerald-100/90">
+              Thanks, <span className="text-white font-medium">{name}</span>. Your full AI Readiness Report is on its way to <span className="text-white font-medium">{email}</span>. You can also download it directly below.
             </p>
           </div>
 
-          {/* Download CTA */}
+          {/* Download CTA — primary action on this screen */}
           {pdfUrl && (
             <a
               href={pdfUrl}
@@ -417,22 +380,7 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
             </a>
           )}
 
-          {/* Report container */}
-          <div
-            className="text-left p-7 sm:p-8 rounded-2xl"
-            style={{
-              background: 'rgba(255,255,255,0.02)',
-              border: '1px solid rgba(255,255,255,0.06)',
-            }}
-          >
-            <div className="mb-6 pb-5 border-b border-white/[0.06]">
-              <span className="kicker text-slate-500">Your Personalised Assessment</span>
-              <h3 className="display-2 mt-2">AI Readiness Report</h3>
-            </div>
-            <ReportRenderer markdown={streamedReport} />
-          </div>
-
-          {/* Next-step CTA — prominent booking ask after the user has read their report */}
+          {/* Next-step CTA — prominent booking ask after the user has their report */}
           <div
             className="text-left p-7 sm:p-8 rounded-2xl relative overflow-hidden"
             style={{
