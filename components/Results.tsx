@@ -4,6 +4,18 @@ import { readAttribution } from '../services/attribution';
 import { track, identify } from '../services/analytics';
 import { Answers } from '../types';
 
+// Booking URLs — the Scaling Up edition points at Dani's calendar by default.
+// Both are overridable via Vite env vars so the URLs can be updated without a
+// code change.
+const DEFAULT_BOOKING_URL =
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ((import.meta as any).env?.VITE_BOOKING_URL as string | undefined)?.trim()
+  || 'https://api.leadconnectorhq.com/widget/bookings/b2b-executive-briefing';
+const SCALING_UP_BOOKING_URL =
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ((import.meta as any).env?.VITE_SCALING_UP_BOOKING_URL as string | undefined)?.trim()
+  || DEFAULT_BOOKING_URL;
+
 interface ResultsProps {
   score: number;
   maxScore: number;
@@ -110,34 +122,46 @@ const ScoreGauge: React.FC<{ score: number; maxScore: number }> = ({ score, maxS
   const strokeDashoffset = circumference - (percentage / 100) * circumference;
   const { tier, accent, pillBg, pillText } = getTierConfig(percentage);
 
+  // Recompute geometry against r=48 — leaves an 8-unit cushion between the
+  // stroke and the viewBox edge so the drop-shadow glow has room to render.
+  const r = 48;
+  const cf = 2 * Math.PI * r;
+  const dashOff = cf - (percentage / 100) * cf;
+
   return (
     <div className="flex flex-col items-center justify-center">
       <div className="relative w-44 h-44">
-        <svg className="w-44 h-44 transform -rotate-90" viewBox="0 0 120 120">
+        <svg
+          className="w-44 h-44 transform -rotate-90"
+          viewBox="0 0 120 120"
+          style={{ overflow: 'visible' }} /* let the glow spill outside the SVG */
+        >
           {/* Track */}
-          <circle cx="60" cy="60" r="55" strokeWidth="8" stroke="rgba(255,255,255,0.07)" fill="transparent" />
+          <circle cx="60" cy="60" r={r} strokeWidth="8" stroke="rgba(255,255,255,0.07)" fill="transparent" />
           {/* Progress */}
           <circle
-            cx="60" cy="60" r="55" strokeWidth="8"
+            cx="60" cy="60" r={r} strokeWidth="8"
             stroke={accent} fill="transparent"
-            strokeDasharray={circumference}
-            strokeDashoffset={strokeDashoffset}
+            strokeDasharray={cf}
+            strokeDashoffset={dashOff}
             strokeLinecap="round"
             style={{
               transition: 'stroke-dashoffset 1.1s cubic-bezier(0.22, 1, 0.36, 1)',
-              filter: `drop-shadow(0 0 8px ${accent}55)`,
+              filter: `drop-shadow(0 0 10px ${accent}80)`,
             }}
           />
         </svg>
-        {/* Centred score number (the percentage) + small "%" sign + "AI READINESS"
-            label beneath. Container only wraps the % so the visual centre stays
-            on the gauge's geometric centre. */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-          <span className="block leading-none text-center text-white tabular tracking-tight">
+        {/* Both lines flow inside the centred wrapper so the GROUP'S visual
+            centre lands on the gauge's geometric centre — not just the big
+            number's centre. */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center">
+          <div className="leading-none text-white tabular tracking-tight">
             <span className="text-[44px] font-semibold">{pctRounded}</span>
             <span className="text-[22px] font-medium text-slate-400 align-top ml-0.5">%</span>
-          </span>
-          <span className="absolute left-1/2 -translate-x-1/2 top-full mt-2 whitespace-nowrap text-[10px] text-slate-400 leading-none tracking-[0.18em] uppercase font-semibold">AI Readiness</span>
+          </div>
+          <div className="mt-2.5 text-[10px] text-slate-400 leading-none tracking-[0.18em] uppercase font-semibold">
+            AI Readiness
+          </div>
         </div>
       </div>
       {/* Tier pill */}
@@ -402,7 +426,7 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
               Your AI Readiness Report tells you <em>where you stand</em>. A 30-minute Strategy Briefing with our team tells you <em>exactly what to do about it</em> — tailored to your business. Complimentary.
             </p>
             <a
-              href="https://api.leadconnectorhq.com/widget/bookings/b2b-executive-briefing"
+              href={source === 'scaling-up' ? SCALING_UP_BOOKING_URL : DEFAULT_BOOKING_URL}
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => track('quiz_booking_clicked', { source, tier })}

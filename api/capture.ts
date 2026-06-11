@@ -693,65 +693,54 @@ async function sendScalingUpConfirmation(args: {
   const from = process.env.RESEND_FROM_EMAIL
     || 'ChiefAIOfficer.com <assessment@chiefaiofficer.com>';
 
-  const pct = Math.round((args.score / args.maxScore) * 100);
+  // Scaling Up CTA goes to Dani's calendar specifically. Configurable via env
+  // var so the URL can be updated without a code change. Falls back to the
+  // default executive-briefing URL if not set.
+  const bookingUrl = process.env.SCALING_UP_BOOKING_URL?.trim() || BOOKING_URL;
   const firstName = (args.name.trim().split(/\s+/)[0]) || args.name;
-  const tierColor =
-    args.tier === 'Leader'  ? '#16a34a' :
-    args.tier === 'Adopter' ? '#2563eb' : '#d97706';
-  const tierBlurb =
-    args.tier === 'Leader'
-      ? "You're operating at the frontier of AI adoption. The focus now is on compounding your advantage — before competitors close the gap."
-      : args.tier === 'Adopter'
-      ? "You're making meaningful progress with AI, but there are critical gaps holding back real business impact. The right roadmap can close them quickly."
-      : "You're at the starting line of your AI journey — which is actually an advantage. You can avoid the costly mistakes early adopters made and build AI the right way.";
 
+  // Simplified per request: just thank-you + PDF button + booking CTA.
+  // The PDF itself carries the score, tier, blurb, and full report.
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Your AI Readiness Results Are In</title>
+<title>Your AI Readiness Report is ready</title>
 </head>
 <body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1f2937;">
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f3f4f6;">
     <tr><td align="center" style="padding:32px 16px;">
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:580px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:560px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
         <tr><td style="padding:22px 32px;background:#1e1b4b;text-align:center;">
           <div style="color:#a5b4fc;font-size:11px;letter-spacing:2px;font-weight:600;text-transform:uppercase;">ChiefAIOfficer.com &nbsp;·&nbsp; In partnership with Scaling Up</div>
         </td></tr>
-        <tr><td style="padding:32px;">
-          <h1 style="margin:0 0 14px;font-size:22px;font-weight:700;color:#1e1b4b;line-height:1.3;">Your AI Readiness Report is ready</h1>
-          <p style="margin:0 0 22px;font-size:15px;line-height:1.6;color:#374151;">Hi ${escapeHtml(firstName)},</p>
-          <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#374151;">Thanks for taking the assessment. Here's exactly where you stand:</p>
-
-          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:10px;margin:0 0 24px;">
-            <tr><td style="padding:24px;text-align:center;">
-              <div style="font-size:11px;color:#4f46e5;letter-spacing:1.5px;font-weight:700;text-transform:uppercase;margin-bottom:8px;">AI Readiness Score</div>
-              <div style="font-size:48px;font-weight:800;color:#1e1b4b;line-height:1;margin-bottom:14px;">${pct}<span style="font-size:24px;color:#6b7280;font-weight:500;margin-left:2px;">%</span></div>
-              <div style="display:inline-block;background:${tierColor};color:#ffffff;padding:7px 18px;border-radius:999px;font-size:13px;font-weight:600;letter-spacing:0.5px;">${escapeHtml(args.tier)} Tier</div>
-            </td></tr>
-          </table>
-
-          <p style="margin:0 0 28px;font-size:15px;line-height:1.6;color:#374151;">${escapeHtml(tierBlurb)}</p>
+        <tr><td style="padding:36px 32px 28px;">
+          <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#1e1b4b;line-height:1.3;">Thanks, ${escapeHtml(firstName)} — your report is ready.</h1>
+          <p style="margin:0 0 28px;font-size:15px;line-height:1.65;color:#374151;">Your personalised AI Readiness Report is attached below. It maps where you stand today, the specific risks at your stage, and the moves that would compound your advantage fastest.</p>
 
           <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
-            <tr><td align="center" style="padding-bottom:6px;">
-              <a href="${args.pdfUrl}" style="display:inline-block;padding:14px 30px;background:#4f46e5;color:#ffffff;text-decoration:none;font-weight:600;border-radius:8px;font-size:15px;">View Your Full Report (PDF)</a>
+            <tr><td align="center" style="padding-bottom:8px;">
+              <a href="${args.pdfUrl}" style="display:inline-block;padding:14px 30px;background:#4f46e5;color:#ffffff;text-decoration:none;font-weight:600;border-radius:8px;font-size:15px;">Download Your Report (PDF)</a>
             </td></tr>
           </table>
+        </td></tr>
 
-          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:32px 0 0;">
-            <tr><td style="border-top:1px solid #e5e7eb;padding-top:28px;">
-              <h2 style="margin:0 0 12px;font-size:18px;font-weight:700;color:#1e1b4b;">Ready to act on it?</h2>
-              <p style="margin:0 0 22px;font-size:15px;line-height:1.6;color:#374151;">Your report outlines the priorities. The fastest next step is a complimentary <b>AI Strategy Briefing</b> — a 30-minute call where we look at your specific business and show you what building a real AI system would look like.</p>
-              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
-                <tr><td align="center">
-                  <a href="${BOOKING_URL}" style="display:inline-block;padding:14px 30px;background:#1e1b4b;color:#ffffff;text-decoration:none;font-weight:600;border-radius:8px;font-size:15px;">Book Your AI Strategy Briefing</a>
+        <tr><td style="padding:0 32px 36px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:10px;">
+            <tr><td style="padding:24px 26px;">
+              <div style="font-size:11px;color:#4f46e5;letter-spacing:1.5px;font-weight:700;text-transform:uppercase;margin-bottom:8px;">Your Next Step</div>
+              <h2 style="margin:0 0 10px;font-size:18px;font-weight:700;color:#1e1b4b;line-height:1.3;">Turn this report into a plan.</h2>
+              <p style="margin:0 0 18px;font-size:14.5px;line-height:1.6;color:#374151;">A 30-minute AI Strategy Briefing with Dani — tailored to your business. Complimentary.</p>
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr><td>
+                  <a href="${bookingUrl}" style="display:inline-block;padding:13px 26px;background:#1e1b4b;color:#ffffff;text-decoration:none;font-weight:600;border-radius:8px;font-size:14.5px;">Book Your AI Strategy Briefing</a>
                 </td></tr>
               </table>
             </td></tr>
           </table>
         </td></tr>
+
         <tr><td style="padding:20px 32px;background:#f9fafb;border-top:1px solid #e5e7eb;text-align:center;">
           <p style="margin:0;font-size:12px;color:#6b7280;line-height:1.5;">ChiefAIOfficer.com &nbsp;·&nbsp; In partnership with Scaling Up<br>You received this because you completed the AI Readiness Assessment.</p>
         </td></tr>
@@ -762,25 +751,21 @@ async function sendScalingUpConfirmation(args: {
 </html>`;
 
   const text = [
-    `Hi ${firstName},`,
+    `Thanks, ${firstName} — your report is ready.`,
     ``,
-    `Your AI Readiness Report is ready.`,
+    `Your personalised AI Readiness Report is attached below. It maps where you stand today, the specific risks at your stage, and the moves that would compound your advantage fastest.`,
     ``,
-    `Your AI Readiness Score: ${pct}% — ${args.tier} tier`,
-    ``,
-    tierBlurb,
-    ``,
-    `View your full report:`,
+    `Download your report (PDF):`,
     args.pdfUrl,
     ``,
     `------------------------------------------------------------`,
     ``,
-    `Ready to act on it?`,
+    `Your Next Step — Turn this report into a plan.`,
     ``,
-    `Your report outlines the priorities. The fastest next step is a complimentary AI Strategy Briefing — a 30-minute call where we look at your specific business and show you what building a real AI system would look like.`,
+    `A 30-minute AI Strategy Briefing with Dani, tailored to your business. Complimentary.`,
     ``,
     `Book your AI Strategy Briefing:`,
-    BOOKING_URL,
+    bookingUrl,
     ``,
     `—`,
     `ChiefAIOfficer.com · In partnership with Scaling Up`,
@@ -790,7 +775,7 @@ async function sendScalingUpConfirmation(args: {
     const resend = new Resend(apiKey);
     const { data, error } = await resend.emails.send({
       from, to: args.to,
-      subject: 'Your AI Readiness Results Are In',
+      subject: `Thanks, ${firstName} — your AI Readiness Report is ready`,
       html, text,
     });
     if (error) {
