@@ -238,6 +238,23 @@
         background: rgba(255, 255, 255, 0.045);
         box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.15);
       }
+      /* Native <option> elements inherit very little from the parent — without
+         these the OS renders the dropdown panel white and our white text
+         disappears against it. */
+      .input-premium option {
+        background-color: var(--bg-base-soft);
+        color: var(--ink);
+        padding: 8px;
+      }
+      .input-premium option:checked {
+        background-color: var(--accent-deep);
+        color: #ffffff;
+      }
+      /* Style the disabled placeholder option (e.g. "Select your role…") in
+         a softer colour so it reads as a hint, not as a real choice. */
+      .input-premium option[value=""] {
+        color: var(--ink-mute);
+      }
 
       /* ─── Focus accessibility ──────────────────────────────────────── */
       *:focus-visible {
