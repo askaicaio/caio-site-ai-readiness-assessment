@@ -5,7 +5,6 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { Document, Page, Text, View, StyleSheet, Image, Link, Svg, Defs, RadialGradient, Stop, Rect } from '@react-pdf/renderer';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { put } from '@vercel/blob';
-import { Resend } from 'resend';
 
 export const config = { maxDuration: 30 };
 
@@ -675,122 +674,12 @@ async function pingMotherboardCompletion(payload: {
   }
 }
 
-// ─── Resend (Scaling Up confirmation email) ─────────────────────────────────
-// The /scaling-up edition bypasses MailerLite and sends a single branded
-// confirmation email directly via Resend, with the score, tier, report link,
-// and the AI Strategy Briefing CTA. Anna wants Dani/Kathryn to own follow-up
-// from inside GHL — this email is just the immediate "here's your report"
-// touch, not a nurture sequence.
-async function sendScalingUpConfirmation(args: {
-  to: string; name: string; score: number; maxScore: number;
-  tier: string; pdfUrl: string;
-}) {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) {
-    console.error('[Resend] RESEND_API_KEY not set — skipping confirmation email.');
-    return;
-  }
-  const from = process.env.RESEND_FROM_EMAIL
-    || 'ChiefAIOfficer.com <assessment@chiefaiofficer.com>';
-
-  // Scaling Up CTA goes to Dani's calendar specifically. Configurable via env
-  // var so the URL can be updated without a code change. Falls back to the
-  // default executive-briefing URL if not set.
-  const bookingUrl = process.env.SCALING_UP_BOOKING_URL?.trim() || BOOKING_URL;
-  const firstName = (args.name.trim().split(/\s+/)[0]) || args.name;
-
-  // Simplified per request: just thank-you + PDF button + booking CTA.
-  // The PDF itself carries the score, tier, blurb, and full report.
-  const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Your AI Readiness Report is ready</title>
-</head>
-<body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1f2937;">
-  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f3f4f6;">
-    <tr><td align="center" style="padding:32px 16px;">
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:560px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
-        <tr><td style="padding:22px 32px;background:#1e1b4b;text-align:center;">
-          <div style="color:#a5b4fc;font-size:11px;letter-spacing:2px;font-weight:600;text-transform:uppercase;">ChiefAIOfficer.com &nbsp;·&nbsp; In partnership with Scaling Up</div>
-        </td></tr>
-        <tr><td style="padding:36px 32px 28px;">
-          <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#1e1b4b;line-height:1.3;">Thanks, ${escapeHtml(firstName)} — your report is ready.</h1>
-          <p style="margin:0 0 28px;font-size:15px;line-height:1.65;color:#374151;">Your personalised AI Readiness Report is attached below. It maps where you stand today, the specific risks at your stage, and the moves that would compound your advantage fastest.</p>
-
-          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
-            <tr><td align="center" style="padding-bottom:8px;">
-              <a href="${args.pdfUrl}" style="display:inline-block;padding:14px 30px;background:#4f46e5;color:#ffffff;text-decoration:none;font-weight:600;border-radius:8px;font-size:15px;">Download Your Report (PDF)</a>
-            </td></tr>
-          </table>
-        </td></tr>
-
-        <tr><td style="padding:0 32px 36px;">
-          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:10px;">
-            <tr><td style="padding:24px 26px;">
-              <div style="font-size:11px;color:#4f46e5;letter-spacing:1.5px;font-weight:700;text-transform:uppercase;margin-bottom:8px;">Your Next Step</div>
-              <h2 style="margin:0 0 10px;font-size:18px;font-weight:700;color:#1e1b4b;line-height:1.3;">Turn this report into a plan.</h2>
-              <p style="margin:0 0 18px;font-size:14.5px;line-height:1.6;color:#374151;">A 30-minute AI Strategy Briefing with Dani — tailored to your business. Complimentary.</p>
-              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
-                <tr><td>
-                  <a href="${bookingUrl}" style="display:inline-block;padding:13px 26px;background:#1e1b4b;color:#ffffff;text-decoration:none;font-weight:600;border-radius:8px;font-size:14.5px;">Book Your AI Strategy Briefing</a>
-                </td></tr>
-              </table>
-            </td></tr>
-          </table>
-        </td></tr>
-
-        <tr><td style="padding:20px 32px;background:#f9fafb;border-top:1px solid #e5e7eb;text-align:center;">
-          <p style="margin:0;font-size:12px;color:#6b7280;line-height:1.5;">ChiefAIOfficer.com &nbsp;·&nbsp; In partnership with Scaling Up<br>You received this because you completed the AI Readiness Assessment.</p>
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body>
-</html>`;
-
-  const text = [
-    `Thanks, ${firstName} — your report is ready.`,
-    ``,
-    `Your personalised AI Readiness Report is attached below. It maps where you stand today, the specific risks at your stage, and the moves that would compound your advantage fastest.`,
-    ``,
-    `Download your report (PDF):`,
-    args.pdfUrl,
-    ``,
-    `------------------------------------------------------------`,
-    ``,
-    `Your Next Step — Turn this report into a plan.`,
-    ``,
-    `A 30-minute AI Strategy Briefing with Dani, tailored to your business. Complimentary.`,
-    ``,
-    `Book your AI Strategy Briefing:`,
-    bookingUrl,
-    ``,
-    `—`,
-    `ChiefAIOfficer.com · In partnership with Scaling Up`,
-  ].join('\n');
-
-  try {
-    const resend = new Resend(apiKey);
-    const { data, error } = await resend.emails.send({
-      from, to: args.to,
-      subject: `Thanks, ${firstName} — your AI Readiness Report is ready`,
-      html, text,
-    });
-    if (error) {
-      console.error('[Resend] send error:', error);
-    } else {
-      console.log(`[Resend] ✓ confirmation sent to ${args.to} (id=${data?.id ?? '?'})`);
-    }
-  } catch (err) {
-    console.error('[Resend] threw:', err);
-  }
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
+// (Historical note: a sendScalingUpConfirmation() helper used to live here
+// to send a direct Resend transactional email for the Scaling Up edition.
+// Removed when the spec flipped: Scaling Up → MailerLite welcome sequence,
+// CAIO → GHL workflow. If we need a direct-send path again, the previous
+// implementation is preserved in git history — last commit before this
+// deletion has the full HTML+plaintext template + Resend send call.)
 
 // ─── Attribution helpers ────────────────────────────────────────────────────
 // Every quiz completion gets a STANDARD tag so motherboard's "AI Readiness
@@ -870,8 +759,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     name: string; email: string; score: number; maxScore: number; fullReport: string;
     company?: string; role?: string; industry?: string; companySize?: string;
     attribution?: Attribution;
-    // 'scaling-up' → partner edition (different GHL webhook, no MailerLite,
-    // Resend confirmation email). Anything else → default CAIO flow.
+    // 'scaling-up' → partner edition (separate GHL webhook + MailerLite tier
+    // welcome sequence delivers the email). Anything else → default CAIO flow
+    // (default GHL webhook only; the GHL workflow composes and sends the
+    // report-delivery email — MailerLite is not involved on the CAIO side).
     source?: 'caio' | 'scaling-up';
   };
   const isScalingUp = source === 'scaling-up';
@@ -959,15 +850,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }).catch(err => console.error('GHL error:', err));
 
   // Email routing:
-  //   Scaling Up → MailerLite tier-group flow (welcome sequence delivers the
-  //                report-delivery email + nurture sequence).
-  //   CAIO       → No MailerLite, no Resend on our side. The GHL workflow
-  //                triggered by the webhook POST above is responsible for
-  //                sending the report-delivery email using the pdfUrl + tier
-  //                + score fields in the payload.
-  // sendScalingUpConfirmation (Resend) is kept defined above but no longer
-  // wired into the fan-out — left in place so it can be swapped back in via
-  // a one-line change if Anna's plan flips again.
+  //   Scaling Up → MailerLite tier-group flow (the welcome sequence delivers
+  //                both the report-delivery email and the nurture sequence).
+  //   CAIO       → no MailerLite. The GHL workflow triggered by the webhook
+  //                POST above is responsible for sending the report-delivery
+  //                email using the pdfUrl + tier + score fields in the payload.
   const emailSide: Promise<unknown> = isScalingUp
     ? addToMailerLite(email, name, pdfUrl, { company, role, industry, companySize, tier })
     : Promise.resolve();

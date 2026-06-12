@@ -15,8 +15,7 @@
     "@vercel/blob": "^0.27.0",
     "posthog-js": "^1.378.1",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "resend": "^6.12.4"
+    "react-dom": "^19.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

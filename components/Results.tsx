@@ -22,9 +22,11 @@ interface ResultsProps {
   answers: Answers;
   onRestart: () => void;
   /**
-   * Which edition of the assessment this submission came from.
-   * Drives backend behaviour in /api/capture (which GHL webhook, whether
-   * MailerLite is used, whether Resend sends the confirmation email).
+   * Which edition of the assessment this submission came from. Drives
+   * backend routing in /api/capture: 'scaling-up' uses a separate GHL
+   * webhook + adds the lead to MailerLite (tier welcome sequence sends
+   * the email); 'caio' (default) uses the default GHL webhook only —
+   * a GHL workflow composes and sends the report-delivery email.
    */
   source?: 'caio' | 'scaling-up';
 }

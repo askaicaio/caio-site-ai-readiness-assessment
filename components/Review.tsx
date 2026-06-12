@@ -218,7 +218,7 @@ export const Review: React.FC = () => {
               <div>
                 <p className="text-white font-semibold">Score on a 0–100% scale</p>
                 <p className="text-[14px] text-slate-400 mt-1 leading-relaxed">
-                  On-screen gauge, PDF cover, report-page score card, and the confirmation email all show the percentage with the tier pill. Underlying scoring (1–4 pts per answer) is unchanged — only the display normalises. Section 04 below details the new weighting.
+                  On-screen gauge, PDF cover, and report-page score card all show the percentage with the tier pill. Underlying scoring (1–4 pts per answer) is unchanged — only the display normalises. Section 04 details the new weighting. <span className="text-slate-300">Note:</span> the report-delivery email content lives in MailerLite (Scaling Up) and GHL (CAIO) templates — make sure those templates reference the percentage if you want consistency across surfaces.
                 </p>
               </div>
             </li>
@@ -585,8 +585,12 @@ export const Review: React.FC = () => {
               <div>
                 <p className="text-white font-semibold">MailerLite welcome sequence for Scaling Up</p>
                 <p className="text-[14px] text-slate-400 mt-1 leading-relaxed">
-                  Scaling Up leads now flow into the same tier groups (<span className="font-mono text-slate-300">AI Readiness - Explorer / Adopter / Leader</span>) the CAIO edition used. If you want Scaling Up to get a different email cadence or tone, fork the sequences and rename the tier groups (e.g. <span className="font-mono text-slate-300">AI Readiness - SU Explorer</span>) — I can update the code to route accordingly.
+                  Scaling Up leads now flow into the same tier groups (<span className="font-mono text-slate-300">AI Readiness - Explorer / Adopter / Leader</span>) the CAIO edition used. Two issues to decide on:
                 </p>
+                <ul className="mt-2 space-y-1.5 text-[13.5px] text-slate-400">
+                  <li>· <b className="text-slate-200">Email tone / copy:</b> the existing sequences were originally written for the CAIO audience. If Scaling Up needs different voice, fork them — name the new groups <span className="font-mono text-slate-300">AI Readiness - SU Explorer</span> etc. and I'll point the code at the SU map.</li>
+                  <li>· <b className="text-slate-200">Booking URL inside MailerLite templates:</b> Dani's calendar should be the primary CTA for Scaling Up, but the MailerLite email templates have whatever booking URL was hand-pasted when you built them (likely the generic executive-briefing one). Update the buttons in the existing tier sequences to point at Dani's calendar — or fork the sequences as above so each audience gets its own URL. The <span className="font-mono text-slate-300">SCALING_UP_BOOKING_URL</span> env var only controls the on-page CTA on <span className="font-mono text-slate-300">/scaling-up</span>; it does NOT control what's inside MailerLite templates.</li>
+                </ul>
               </div>
             </li>
             <li className="flex gap-3">
