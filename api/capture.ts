@@ -958,12 +958,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     body: JSON.stringify(ghlBody),
   }).catch(err => console.error('GHL error:', err));
 
-  // Scaling Up: skip MailerLite, send the branded confirmation via Resend.
-  // Default: existing MailerLite tier-group flow (which fires its own welcome
-  // sequence — no Resend send needed).
-  const emailSide = isScalingUp
-    ? sendScalingUpConfirmation({ to: email, name, score, maxScore, tier, pdfUrl })
-    : addToMailerLite(email, name, pdfUrl, { company, role, industry, companySize, tier });
+  // Email routing:
+  //   Scaling Up → MailerLite tier-group flow (welcome sequence delivers the
+  //                report-delivery email + nurture sequence).
+  //   CAIO       → No MailerLite, no Resend on our side. The GHL workflow
+  //                triggered by the webhook POST above is responsible for
+  //                sending the report-delivery email using the pdfUrl + tier
+  //                + score fields in the payload.
+  // sendScalingUpConfirmation (Resend) is kept defined above but no longer
+  // wired into the fan-out — left in place so it can be swapped back in via
+  // a one-line change if Anna's plan flips again.
+  const emailSide: Promise<unknown> = isScalingUp
+    ? addToMailerLite(email, name, pdfUrl, { company, role, industry, companySize, tier })
+    : Promise.resolve();
 
   // Server-side completion ping to motherboard for live monitoring (both
   // editions). The client-side visit ping only fires on UTM-tagged traffic;

@@ -257,7 +257,7 @@ export const Review: React.FC = () => {
               <Pill color="#818cf8">CAIO edition</Pill>
             </div>
             <p className="text-[13.5px] text-slate-400 leading-relaxed mb-5">
-              The default ChiefAIOfficer.com flow. Routes signups to the master GHL webhook and into the MailerLite tier-aware nurture sequence.
+              The default ChiefAIOfficer.com flow. Routes signups to the master GHL webhook — and the GHL workflow handles the report-delivery email and follow-up directly. MailerLite is not involved on this edition.
             </p>
             <a
               href="/"
@@ -274,7 +274,7 @@ export const Review: React.FC = () => {
               <Pill color="#34d399">Scaling Up edition</Pill>
             </div>
             <p className="text-[13.5px] text-slate-400 leading-relaxed mb-5">
-              The Scaling Up Community flow. Same quiz; routes to its own GHL webhook (Dani / Kathryn) and sends a single Resend confirmation email — bypasses MailerLite.
+              The Scaling Up Community flow. Same quiz; routes to its own GHL webhook (Dani / Kathryn) and adds the lead to the MailerLite tier group so the tier-aware welcome sequence delivers the report + nurture.
             </p>
             <a
               href="/scaling-up"
@@ -326,7 +326,7 @@ export const Review: React.FC = () => {
           <Step
             num={6}
             title="Confirmation email arrives"
-            what="Sent immediately via Resend (Scaling Up) or via MailerLite (CAIO). Branded design with the score card, tier pill, PDF link, and booking CTA. Section 06 has the mockup."
+            what="For Scaling Up, MailerLite's tier-aware welcome sequence sends the report-delivery email. For CAIO, a GHL workflow sends it from the webhook payload. Both contain the PDF link and a booking CTA."
           />
         </div>
       </Section>
@@ -428,7 +428,7 @@ export const Review: React.FC = () => {
           ════════════════════════════════════════════════════════════════════ */}
       <Section num="06" kicker="Email" title="Confirmation email design">
         <p className="lead text-[15px] mb-6 max-w-2xl">
-          The Scaling Up edition sends one immediate transactional email via Resend (no MailerLite involvement). Subject: <span className="text-slate-300">"Your AI Readiness Results Are In"</span>. Visual mockup below.
+          Both editions ultimately deliver the report via email — they just take different paths to get there. <b className="text-slate-200">Scaling Up</b> uses the MailerLite tier-aware welcome sequence (Email 1 = report delivery, then nurture). <b className="text-slate-200">CAIO</b> uses a GHL workflow triggered by the webhook to send the report-delivery email. The mock below is representative of the polished tone — actual templates live in MailerLite + GHL respectively.
         </p>
         <EmailMock />
         <p className="text-[12.5px] text-slate-500 mt-5 text-center">
@@ -468,8 +468,8 @@ export const Review: React.FC = () => {
               <div>
                 <span className="text-white font-semibold">Email — branches by edition</span><br />
                 <span className="text-slate-400 text-[13.5px]">
-                  CAIO → MailerLite (master group + tier group; tier-aware welcome sequence fires).<br />
-                  Scaling Up → Resend transactional email with results + booking CTA.
+                  Scaling Up → added to MailerLite (master group + tier group); the tier-aware welcome sequence delivers the report-delivery email + nurture.<br />
+                  CAIO → no MailerLite, no Resend; a GHL workflow listening on the webhook composes and sends the report-delivery email using the payload's pdfUrl + tier + score.
                 </span>
               </div>
             </li>
@@ -535,24 +535,57 @@ export const Review: React.FC = () => {
       <Section num="09" kicker="Over to You" title="Open items + questions">
         <SubtleCard>
           <p className="text-[14.5px] text-slate-300 leading-relaxed mb-4">
-            A few things still benefit from your steer when you have a moment:
+            <b className="text-white">Closed (Josh's answers landed):</b>
+          </p>
+          <ul className="space-y-4 mb-7">
+            <li className="flex gap-3">
+              <Check />
+              <div>
+                <p className="text-white font-semibold">Confirmation email content</p>
+                <p className="text-[14px] text-slate-400 mt-1 leading-relaxed">
+                  Just thank-you + PDF button + booking CTA. Implemented for the Resend version when it was active; the same simple structure should be used in the MailerLite + GHL templates going forward.
+                </p>
+              </div>
+            </li>
+            <li className="flex gap-3">
+              <Check />
+              <div>
+                <p className="text-white font-semibold">Next step after form completion</p>
+                <p className="text-[14px] text-slate-400 mt-1 leading-relaxed">
+                  Thank-you screen with score, tier, PDF download, and the AI Strategy Briefing CTA. Live and confirmed.
+                </p>
+              </div>
+            </li>
+            <li className="flex gap-3">
+              <Check />
+              <div>
+                <p className="text-white font-semibold">Schedule briefing with Dani — primary CTA</p>
+                <p className="text-[14px] text-slate-400 mt-1 leading-relaxed">
+                  Configured via the <span className="font-mono text-slate-300">SCALING_UP_BOOKING_URL</span> and <span className="font-mono text-slate-300">VITE_SCALING_UP_BOOKING_URL</span> env vars. Drop in Dani's calendar URL in Vercel → applies to both the on-page CTA and any future email template.
+                </p>
+              </div>
+            </li>
+          </ul>
+
+          <p className="text-[14.5px] text-slate-300 leading-relaxed mb-4">
+            <b className="text-white">Still need your input:</b>
           </p>
           <ul className="space-y-4">
             <li className="flex gap-3">
               <Check done={false} />
               <div>
-                <p className="text-white font-semibold">Confirmation email content (Scaling Up specifically)</p>
+                <p className="text-white font-semibold">Build the CAIO email workflow inside GHL</p>
                 <p className="text-[14px] text-slate-400 mt-1 leading-relaxed">
-                  Full results in-line, or just thank-you + next-step? Current build includes the score / tier / blurb / PDF button + booking CTA.
+                  The CAIO edition no longer uses MailerLite — the email is now sent by a GHL workflow listening on the same webhook. The webhook payload includes <span className="font-mono text-slate-300">pdfUrl</span>, <span className="font-mono text-slate-300">tier</span>, <span className="font-mono text-slate-300">scorePercentage</span>, <span className="font-mono text-slate-300">name</span>, <span className="font-mono text-slate-300">email</span>. The GHL workflow needs to compose + send the report-delivery email from those fields. I can draft the workflow spec if helpful — just say the word.
                 </p>
               </div>
             </li>
             <li className="flex gap-3">
               <Check done={false} />
               <div>
-                <p className="text-white font-semibold">Next step for Scaling Up submissions</p>
+                <p className="text-white font-semibold">MailerLite welcome sequence for Scaling Up</p>
                 <p className="text-[14px] text-slate-400 mt-1 leading-relaxed">
-                  Current CTA → book an AI Strategy Briefing. Confirm this is right vs e.g. routing to Dani directly.
+                  Scaling Up leads now flow into the same tier groups (<span className="font-mono text-slate-300">AI Readiness - Explorer / Adopter / Leader</span>) the CAIO edition used. If you want Scaling Up to get a different email cadence or tone, fork the sequences and rename the tier groups (e.g. <span className="font-mono text-slate-300">AI Readiness - SU Explorer</span>) — I can update the code to route accordingly.
                 </p>
               </div>
             </li>
@@ -561,7 +594,7 @@ export const Review: React.FC = () => {
               <div>
                 <p className="text-white font-semibold">Lead-assignment process inside GHL</p>
                 <p className="text-[14px] text-slate-400 mt-1 leading-relaxed">
-                  We tag every lead with <span className="font-mono text-slate-300">Edition: Scaling Up</span> — your call on assignment rules and SLAs inside GHL.
+                  We tag every lead with <span className="font-mono text-slate-300">Edition: Scaling Up</span> — your call on assignment rules and SLAs inside GHL. I gave you a copy-pasteable workflow spec earlier; let me know once it's built.
                 </p>
               </div>
             </li>
