@@ -9,6 +9,7 @@
   },
   "rewrites": [
     { "source": "/scaling-up", "destination": "/index.html" },
-    { "source": "/review", "destination": "/index.html" }
+    { "source": "/review", "destination": "/index.html" },
+    { "source": "/sales-guide", "destination": "/index.html" }
   ]
 }

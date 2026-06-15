@@ -6,6 +6,7 @@ import { ProgressBar } from './components/ProgressBar';
 import { QuestionCard } from './components/QuestionCard';
 import { Results } from './components/Results';
 import { Review } from './components/Review';
+import { SalesGuide } from './components/SalesGuide';
 import { captureAttributionFromUrl, pingQuizVisit } from './services/attribution';
 import { track } from './services/analytics';
 
@@ -22,14 +23,24 @@ const detectSource = (): QuizSource =>
 
 const isReviewPath = (): boolean =>
   typeof window !== 'undefined' && window.location.pathname.startsWith('/review');
+const isSalesGuidePath = (): boolean =>
+  typeof window !== 'undefined' && window.location.pathname.startsWith('/sales-guide');
 
 // Top-level App branches by path BEFORE any quiz-state hooks run so we
-// don't violate the rules of hooks when the review path is active.
+// don't violate the rules of hooks when an internal-doc path is active.
 const App: React.FC = () => {
   if (isReviewPath()) {
     return (
       <div className="min-h-screen">
         <Review />
+        <Analytics />
+      </div>
+    );
+  }
+  if (isSalesGuidePath()) {
+    return (
+      <div className="min-h-screen">
+        <SalesGuide />
         <Analytics />
       </div>
     );
