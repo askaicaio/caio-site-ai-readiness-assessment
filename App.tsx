@@ -7,6 +7,7 @@ import { QuestionCard } from './components/QuestionCard';
 import { Results } from './components/Results';
 import { Review } from './components/Review';
 import { SalesGuide } from './components/SalesGuide';
+import { LeadsPage } from './components/LeadsPage';
 import { captureAttributionFromUrl, pingQuizVisit } from './services/attribution';
 import { track } from './services/analytics';
 
@@ -25,6 +26,8 @@ const isReviewPath = (): boolean =>
   typeof window !== 'undefined' && window.location.pathname.startsWith('/review');
 const isSalesGuidePath = (): boolean =>
   typeof window !== 'undefined' && window.location.pathname.startsWith('/sales-guide');
+const isLeadsPath = (): boolean =>
+  typeof window !== 'undefined' && window.location.pathname.startsWith('/scaling-up-leads');
 
 // Top-level App branches by path BEFORE any quiz-state hooks run so we
 // don't violate the rules of hooks when an internal-doc path is active.
@@ -44,6 +47,11 @@ const App: React.FC = () => {
         <Analytics />
       </div>
     );
+  }
+  if (isLeadsPath()) {
+    // Password-gated Scaling Up team portal. No Analytics on this route —
+    // team activity shouldn't inflate the public quiz's traffic numbers.
+    return <LeadsPage />;
   }
   return <Quiz />;
 };

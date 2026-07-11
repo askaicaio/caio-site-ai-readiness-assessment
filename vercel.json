@@ -10,6 +10,23 @@
   "rewrites": [
     { "source": "/scaling-up", "destination": "/index.html" },
     { "source": "/review", "destination": "/index.html" },
-    { "source": "/sales-guide", "destination": "/index.html" }
+    { "source": "/sales-guide", "destination": "/index.html" },
+    { "source": "/scaling-up-leads", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/scaling-up-leads",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive, nosnippet" },
+        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, private" }
+      ]
+    },
+    {
+      "source": "/api/leads",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive, nosnippet" },
+        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, private" }
+      ]
+    }
   ]
 }

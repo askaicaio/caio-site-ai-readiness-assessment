@@ -538,7 +538,10 @@ async function resolveGroupIdByName(name: string, headers: MlHeaders): Promise<s
 // what each per-tier welcome automation triggers on.
 async function addToMailerLite(
   email: string, name: string, pdfUrl: string,
-  extras: { company?: string; role?: string; industry?: string; companySize?: string; tier?: string }
+  extras: {
+    company?: string; role?: string; industry?: string; companySize?: string;
+    tier?: string; pct?: number; edition?: 'caio' | 'scaling-up';
+  },
 ) {
   const apiKey = process.env.MAILERLITE_API_KEY;
   console.log('[ML] starting; key present:', !!apiKey, 'key length:', (apiKey || '').length, 'group:', MAILERLITE_GROUP_ID);
@@ -555,11 +558,17 @@ async function addToMailerLite(
   };
 
   const fields: Record<string, string> = { name };
-  if (pdfUrl)             fields.pdf_url      = pdfUrl;
-  if (extras.company)     fields.company      = extras.company;
-  if (extras.role)        fields.role         = extras.role;
-  if (extras.industry)    fields.industry     = extras.industry;
-  if (extras.companySize) fields.company_size = extras.companySize;
+  if (pdfUrl)               fields.pdf_url      = pdfUrl;
+  if (extras.company)       fields.company      = extras.company;
+  if (extras.role)          fields.role         = extras.role;
+  if (extras.industry)      fields.industry     = extras.industry;
+  if (extras.companySize)   fields.company_size = extras.companySize;
+  // Additional fields the Scaling Up leads portal reads to display tier + score
+  // + edition columns. Safe to send even if the custom fields don't exist yet
+  // in MailerLite — the two-step retry below strips them on 422.
+  if (extras.tier)          fields.tier         = extras.tier;
+  if (extras.pct != null)   fields.pct          = String(extras.pct);
+  if (extras.edition)       fields.edition      = extras.edition;
 
   // ── Step 1: Create or update the subscriber ─────────────────────────────
   const SUB_URL = 'https://connect.mailerlite.com/api/subscribers';
@@ -856,7 +865,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   //                POST above is responsible for sending the report-delivery
   //                email using the pdfUrl + tier + score fields in the payload.
   const emailSide: Promise<unknown> = isScalingUp
-    ? addToMailerLite(email, name, pdfUrl, { company, role, industry, companySize, tier })
+    ? addToMailerLite(email, name, pdfUrl, {
+        company, role, industry, companySize,
+        tier, pct, edition: 'scaling-up',
+      })
     : Promise.resolve();
 
   // Server-side completion ping to motherboard for live monitoring (both
