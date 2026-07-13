@@ -187,6 +187,7 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const [fetchedAt, setFetchedAt] = useState('');
   const [filter, setFilter]   = useState('');
   const [tierFilter, setTierFilter] = useState<'' | 'Explorer' | 'Adopter' | 'Leader'>('');
+  const [editionFilter, setEditionFilter] = useState<'' | 'scaling-up' | 'caio'>('scaling-up');
   const [sortKey, setSortKey] = useState<SortKey>('subscribedAt');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
@@ -217,6 +218,12 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
     return leads
       .filter(l => {
         if (tierFilter && l.tier !== tierFilter) return false;
+        if (editionFilter) {
+          // Old records may have a blank edition — only include them when the
+          // filter is "all". Otherwise strict match on the field value.
+          if (!l.edition) return false;
+          if (l.edition !== editionFilter) return false;
+        }
         if (!q) return true;
         return [l.name, l.email, l.company, l.role, l.industry]
           .some(v => v && v.toLowerCase().includes(q));
@@ -232,7 +239,7 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
         if (av === bv) return 0;
         return sortDir === 'asc' ? (av < bv ? -1 : 1) : (av < bv ? 1 : -1);
       });
-  }, [leads, filter, tierFilter, sortKey, sortDir]);
+  }, [leads, filter, tierFilter, editionFilter, sortKey, sortDir]);
 
   const toggleSort = (k: SortKey) => {
     if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -282,7 +289,7 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
 
         {/* Filters */}
         <SubtleCard className="!p-4 sm:!p-5 mb-5">
-          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-3 items-center">
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-3 items-center">
             <input
               type="search"
               value={filter}
@@ -291,19 +298,31 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
               className="input-premium block w-full"
             />
             <select
+              value={editionFilter}
+              onChange={e => setEditionFilter(e.target.value as typeof editionFilter)}
+              className="input-premium block appearance-none pr-9 cursor-pointer bg-no-repeat bg-[right_0.85rem_center] bg-[length:14px_14px]"
+              style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")" }}
+              aria-label="Filter by edition"
+            >
+              <option value="scaling-up">Scaling Up only</option>
+              <option value="caio">CAIO only</option>
+              <option value="">All editions</option>
+            </select>
+            <select
               value={tierFilter}
               onChange={e => setTierFilter(e.target.value as typeof tierFilter)}
               className="input-premium block appearance-none pr-9 cursor-pointer bg-no-repeat bg-[right_0.85rem_center] bg-[length:14px_14px]"
               style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")" }}
+              aria-label="Filter by tier"
             >
               <option value="">All tiers</option>
               <option value="Leader">Leader</option>
               <option value="Adopter">Adopter</option>
               <option value="Explorer">Explorer</option>
             </select>
-            {(filter || tierFilter) && (
-              <button onClick={() => { setFilter(''); setTierFilter(''); }} className="btn-ghost text-[13px]">
-                Clear
+            {(filter || tierFilter || editionFilter !== 'scaling-up') && (
+              <button onClick={() => { setFilter(''); setTierFilter(''); setEditionFilter('scaling-up'); }} className="btn-ghost text-[13px]">
+                Reset
               </button>
             )}
           </div>
@@ -330,6 +349,7 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
                   <th className="px-4 py-3">Email</th>
                   <ThSort label="Tier"    onClick={() => toggleSort('tier')}         active={sortKey === 'tier'} dir={sortDir} />
                   <ThSort label="Score"   onClick={() => toggleSort('pct')}          active={sortKey === 'pct'} dir={sortDir} />
+                  <th className="px-4 py-3">Edition</th>
                   <ThSort label="Company" onClick={() => toggleSort('company')}      active={sortKey === 'company'} dir={sortDir} />
                   <th className="px-4 py-3">Role</th>
                   <th className="px-4 py-3">Industry</th>
@@ -339,7 +359,7 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
               <tbody className="text-slate-300">
                 {!loading && filtered.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="px-4 py-10 text-center text-slate-500 text-[13px]">
+                    <td colSpan={10} className="px-4 py-10 text-center text-slate-500 text-[13px]">
                       {leads.length === 0 ? 'No subscribers in MailerLite yet.' : 'No leads match those filters.'}
                     </td>
                   </tr>
@@ -354,6 +374,9 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
                     <td className="px-4 py-3 text-slate-400 max-w-[220px] truncate">{lead.email}</td>
                     <td className="px-4 py-3"><TierPill tier={lead.tier} /></td>
                     <td className="px-4 py-3 tabular text-white">{lead.pct ? `${lead.pct}%` : '—'}</td>
+                    <td className="px-4 py-3 text-[12px] uppercase tracking-wider text-slate-400">
+                      {lead.edition === 'scaling-up' ? 'SU' : lead.edition === 'caio' ? 'CAIO' : '—'}
+                    </td>
                     <td className="px-4 py-3 max-w-[180px] truncate">{lead.company || '—'}</td>
                     <td className="px-4 py-3 max-w-[160px] truncate text-slate-400">{lead.role || '—'}</td>
                     <td className="px-4 py-3 max-w-[140px] truncate text-slate-400">{lead.industry || '—'}</td>

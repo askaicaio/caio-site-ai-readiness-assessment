@@ -768,10 +768,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     name: string; email: string; score: number; maxScore: number; fullReport: string;
     company?: string; role?: string; industry?: string; companySize?: string;
     attribution?: Attribution;
-    // 'scaling-up' → partner edition (separate GHL webhook + MailerLite tier
-    // welcome sequence delivers the email). Anything else → default CAIO flow
-    // (default GHL webhook only; the GHL workflow composes and sends the
-    // report-delivery email — MailerLite is not involved on the CAIO side).
+    // 'scaling-up' → partner edition. Uses the separate SCALING_UP_GHL_WEBHOOK_URL
+    // (falls back to the default CAIO webhook if unset). Anything else → default
+    // CAIO flow (default GHL webhook). Both editions share the MailerLite tier
+    // welcome sequence for the report-delivery email; GHL workflows can still
+    // distinguish them via the Edition: {CAIO|Scaling Up} tag or the top-level
+    // `edition` field for lead-assignment / notification purposes.
     source?: 'caio' | 'scaling-up';
   };
   const isScalingUp = source === 'scaling-up';
@@ -859,17 +861,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }).catch(err => console.error('GHL error:', err));
 
   // Email routing:
-  //   Scaling Up → MailerLite tier-group flow (the welcome sequence delivers
-  //                both the report-delivery email and the nurture sequence).
-  //   CAIO       → no MailerLite. The GHL workflow triggered by the webhook
-  //                POST above is responsible for sending the report-delivery
-  //                email using the pdfUrl + tier + score fields in the payload.
-  const emailSide: Promise<unknown> = isScalingUp
-    ? addToMailerLite(email, name, pdfUrl, {
-        company, role, industry, companySize,
-        tier, pct, edition: 'scaling-up',
-      })
-    : Promise.resolve();
+  //   Both editions use the MailerLite tier-group flow (the welcome sequence
+  //   delivers the report-delivery email + nurture). The GHL webhook still
+  //   fires for both editions with an Edition: {CAIO|Scaling Up} tag, so any
+  //   GHL workflow can still branch on edition for lead-assignment purposes.
+  //   The `edition` field is stamped onto every MailerLite subscriber so the
+  //   /scaling-up-leads portal can filter one audience from the other.
+  const emailSide: Promise<unknown> = addToMailerLite(email, name, pdfUrl, {
+    company, role, industry, companySize,
+    tier, pct, edition: isScalingUp ? 'scaling-up' : 'caio',
+  });
 
   // Server-side completion ping to motherboard for live monitoring (both
   // editions). The client-side visit ping only fires on UTM-tagged traffic;

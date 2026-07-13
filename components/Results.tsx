@@ -23,10 +23,11 @@ interface ResultsProps {
   onRestart: () => void;
   /**
    * Which edition of the assessment this submission came from. Drives
-   * backend routing in /api/capture: 'scaling-up' uses a separate GHL
-   * webhook + adds the lead to MailerLite (tier welcome sequence sends
-   * the email); 'caio' (default) uses the default GHL webhook only —
-   * a GHL workflow composes and sends the report-delivery email.
+   * backend routing in /api/capture: both editions add the lead to
+   * MailerLite (shared tier welcome sequence delivers the email);
+   * 'scaling-up' additionally posts to the Scaling Up GHL webhook when
+   * configured, 'caio' (default) posts to the default GHL webhook.
+   * GHL workflows distinguish via the `Edition:` tag.
    */
   source?: 'caio' | 'scaling-up';
 }

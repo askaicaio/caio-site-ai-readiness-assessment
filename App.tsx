@@ -12,10 +12,11 @@ import { captureAttributionFromUrl, pingQuizVisit } from './services/attribution
 import { track } from './services/analytics';
 
 // Two flavors of the assessment live in the same app, differentiated only by
-// URL path. /scaling-up is the partner edition (separate GHL webhook + the
-// MailerLite tier-aware welcome sequence delivers the report email). Everything
-// else is the default CAIO edition (default GHL webhook only; a GHL workflow
-// composes + sends the report email — no MailerLite on the CAIO side).
+// URL path. /scaling-up is the partner edition (uses the separate Scaling Up
+// GHL webhook when configured). Everything else is the default CAIO edition.
+// Both editions share the MailerLite tier-aware welcome sequence for email
+// delivery — the difference is the GHL webhook target + the Edition tag so
+// downstream GHL workflows (lead assignment, notifications) can branch.
 export type QuizSource = 'caio' | 'scaling-up';
 const detectSource = (): QuizSource =>
   typeof window !== 'undefined' && window.location.pathname.startsWith('/scaling-up')

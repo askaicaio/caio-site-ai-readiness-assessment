@@ -218,7 +218,7 @@ export const Review: React.FC = () => {
               <div>
                 <p className="text-white font-semibold">Score on a 0–100% scale</p>
                 <p className="text-[14px] text-slate-400 mt-1 leading-relaxed">
-                  On-screen gauge, PDF cover, and report-page score card all show the percentage with the tier pill. Underlying scoring (1–4 pts per answer) is unchanged — only the display normalises. Section 04 details the new weighting. <span className="text-slate-300">Note:</span> the report-delivery email content lives in MailerLite (Scaling Up) and GHL (CAIO) templates — make sure those templates reference the percentage if you want consistency across surfaces.
+                  On-screen gauge, PDF cover, and report-page score card all show the percentage with the tier pill. Underlying scoring (1–4 pts per answer) is unchanged — only the display normalises. Section 04 details the new weighting. <span className="text-slate-300">Note:</span> the report-delivery email content lives in MailerLite templates — make sure they reference the percentage if you want consistency across surfaces.
                 </p>
               </div>
             </li>
@@ -257,7 +257,7 @@ export const Review: React.FC = () => {
               <Pill color="#818cf8">CAIO edition</Pill>
             </div>
             <p className="text-[13.5px] text-slate-400 leading-relaxed mb-5">
-              The default ChiefAIOfficer.com flow. Routes signups to the master GHL webhook — and the GHL workflow handles the report-delivery email and follow-up directly. MailerLite is not involved on this edition.
+              The default ChiefAIOfficer.com flow. Routes signups to the master GHL webhook and adds the lead to the MailerLite tier group so the shared tier-aware welcome sequence delivers the report + nurture.
             </p>
             <a
               href="/"
@@ -274,7 +274,7 @@ export const Review: React.FC = () => {
               <Pill color="#34d399">Scaling Up edition</Pill>
             </div>
             <p className="text-[13.5px] text-slate-400 leading-relaxed mb-5">
-              The Scaling Up Community flow. Same quiz; routes to its own GHL webhook (Dani / Kathryn) and adds the lead to the MailerLite tier group so the tier-aware welcome sequence delivers the report + nurture.
+              The Scaling Up Community flow. Same quiz; routes to its own GHL webhook (Dani / Kathryn) and adds the lead to the MailerLite tier group so the shared tier-aware welcome sequence delivers the report + nurture. The <span className="font-mono text-slate-300">edition</span> tag lets downstream GHL workflows tell the two apart.
             </p>
             <a
               href="/scaling-up"
@@ -326,7 +326,7 @@ export const Review: React.FC = () => {
           <Step
             num={6}
             title="Confirmation email arrives"
-            what="For Scaling Up, MailerLite's tier-aware welcome sequence sends the report-delivery email. For CAIO, a GHL workflow sends it from the webhook payload. Both contain the PDF link and a booking CTA."
+            what="For both editions, MailerLite's tier-aware welcome sequence sends the report-delivery email (Email 1 in each tier group). Each email contains the PDF link and the AI Strategy Briefing CTA. The GHL webhook still fires for both editions so lead assignment / notifications can branch on the Edition tag."
           />
         </div>
       </Section>
@@ -428,7 +428,7 @@ export const Review: React.FC = () => {
           ════════════════════════════════════════════════════════════════════ */}
       <Section num="06" kicker="Email" title="Confirmation email design">
         <p className="lead text-[15px] mb-6 max-w-2xl">
-          Both editions ultimately deliver the report via email — they just take different paths to get there. <b className="text-slate-200">Scaling Up</b> uses the MailerLite tier-aware welcome sequence (Email 1 = report delivery, then nurture). <b className="text-slate-200">CAIO</b> uses a GHL workflow triggered by the webhook to send the report-delivery email. The mock below is representative of the polished tone — actual templates live in MailerLite + GHL respectively.
+          Both editions deliver the report via the shared MailerLite welcome sequence (Email 1 = report delivery, then nurture). The <b className="text-slate-200">edition</b> field on each MailerLite subscriber + the <span className="font-mono text-slate-300">Edition:</span> tag on the GHL contact let you distinguish audiences. The mock below is representative of the polished tone — actual templates live in MailerLite.
         </p>
         <EmailMock />
         <p className="text-[12.5px] text-slate-500 mt-5 text-center">
@@ -466,10 +466,9 @@ export const Review: React.FC = () => {
             <li className="flex gap-3">
               <span className="kicker text-indigo-300 tabular flex-shrink-0 w-7 pt-0.5">04</span>
               <div>
-                <span className="text-white font-semibold">Email — branches by edition</span><br />
+                <span className="text-white font-semibold">Email — same path for both editions</span><br />
                 <span className="text-slate-400 text-[13.5px]">
-                  Scaling Up → added to MailerLite (master group + tier group); the tier-aware welcome sequence delivers the report-delivery email + nurture.<br />
-                  CAIO → no MailerLite, no Resend; a GHL workflow listening on the webhook composes and sends the report-delivery email using the payload's pdfUrl + tier + score.
+                  Both editions: added to MailerLite (master group + tier group); the shared tier-aware welcome sequence delivers the report-delivery email + nurture. The <span className="font-mono text-slate-300">edition</span> field on the subscriber (and the <span className="font-mono text-slate-300">Edition:</span> tag on the GHL contact) distinguish audiences downstream.
                 </span>
               </div>
             </li>
@@ -574,23 +573,19 @@ export const Review: React.FC = () => {
             <li className="flex gap-3">
               <Check done={false} />
               <div>
-                <p className="text-white font-semibold">Build the CAIO email workflow inside GHL</p>
+                <p className="text-white font-semibold">Shared MailerLite welcome sequence for both editions</p>
                 <p className="text-[14px] text-slate-400 mt-1 leading-relaxed">
-                  The CAIO edition no longer uses MailerLite — the email is now sent by a GHL workflow listening on the same webhook. The webhook payload includes <span className="font-mono text-slate-300">pdfUrl</span>, <span className="font-mono text-slate-300">tier</span>, <span className="font-mono text-slate-300">scorePercentage</span>, <span className="font-mono text-slate-300">name</span>, <span className="font-mono text-slate-300">email</span>. The GHL workflow needs to compose + send the report-delivery email from those fields. I can draft the workflow spec if helpful — just say the word.
+                  Both CAIO and Scaling Up leads now flow into the same tier groups (<span className="font-mono text-slate-300">AI Readiness - Explorer / Adopter / Leader</span>) and receive the same welcome sequence. You confirmed this is intended — both audiences see identical email copy. If you ever want to fork them (e.g. Dani's calendar link for Scaling Up leads only), we can add a separate SU tier-group map + parallel sequences. For now, the <span className="font-mono text-slate-300">edition</span> field on each subscriber lets segments filter by audience.
                 </p>
               </div>
             </li>
             <li className="flex gap-3">
               <Check done={false} />
               <div>
-                <p className="text-white font-semibold">MailerLite welcome sequence for Scaling Up</p>
+                <p className="text-white font-semibold">Booking URL inside MailerLite templates</p>
                 <p className="text-[14px] text-slate-400 mt-1 leading-relaxed">
-                  Scaling Up leads now flow into the same tier groups (<span className="font-mono text-slate-300">AI Readiness - Explorer / Adopter / Leader</span>) the CAIO edition used. Two issues to decide on:
+                  Since the welcome sequence is now shared, whatever booking URL is in the MailerLite email templates goes to both audiences. If you want Scaling Up to hit Dani's calendar specifically, you'll need to either (a) fork the sequences (see above) or (b) use MailerLite's conditional content by <span className="font-mono text-slate-300">edition</span> field. The <span className="font-mono text-slate-300">SCALING_UP_BOOKING_URL</span> env var only controls the on-page CTA on <span className="font-mono text-slate-300">/scaling-up</span>, not the email content.
                 </p>
-                <ul className="mt-2 space-y-1.5 text-[13.5px] text-slate-400">
-                  <li>· <b className="text-slate-200">Email tone / copy:</b> the existing sequences were originally written for the CAIO audience. If Scaling Up needs different voice, fork them — name the new groups <span className="font-mono text-slate-300">AI Readiness - SU Explorer</span> etc. and I'll point the code at the SU map.</li>
-                  <li>· <b className="text-slate-200">Booking URL inside MailerLite templates:</b> Dani's calendar should be the primary CTA for Scaling Up, but the MailerLite email templates have whatever booking URL was hand-pasted when you built them (likely the generic executive-briefing one). Update the buttons in the existing tier sequences to point at Dani's calendar — or fork the sequences as above so each audience gets its own URL. The <span className="font-mono text-slate-300">SCALING_UP_BOOKING_URL</span> env var only controls the on-page CTA on <span className="font-mono text-slate-300">/scaling-up</span>; it does NOT control what's inside MailerLite templates.</li>
-                </ul>
               </div>
             </li>
             <li className="flex gap-3">
