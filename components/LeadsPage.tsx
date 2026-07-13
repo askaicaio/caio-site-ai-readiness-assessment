@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 interface QA { question: string; answer: string }
 
@@ -30,10 +30,79 @@ interface Lead {
 const editionLabel = (e?: string): string =>
   e === 'scaling-up' ? 'Scaling Up' : e === 'caio' ? 'CAIO' : '';
 
-// Shared <select> styling (dark, custom chevron) used across the filter row.
-const selectCls = 'input-premium block appearance-none pr-9 cursor-pointer bg-no-repeat bg-[right_0.85rem_center] bg-[length:14px_14px]';
-const selectBg: React.CSSProperties = {
-  backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")",
+// ─── Custom Select ────────────────────────────────────────────────────────────
+// Native <select> option lists are OS-drawn and can't be themed (the ugly
+// hover). This is a fully-styled dropdown we control end-to-end.
+const Select: React.FC<{
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  ariaLabel?: string;
+  minWidth?: number;
+}> = ({ value, onChange, options, ariaLabel, minWidth = 160 }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const current = options.find(o => o.value === value)?.label ?? '';
+
+  return (
+    <div ref={ref} className="relative" style={{ minWidth }}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-label={ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="input-premium w-full flex items-center justify-between gap-2 cursor-pointer text-left text-[14px]"
+      >
+        <span className="truncate">{current}</span>
+        <svg
+          className={`w-3.5 h-3.5 flex-shrink-0 text-slate-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+          viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+      {open && (
+        <div
+          role="listbox"
+          className="absolute z-40 mt-1.5 w-full rounded-xl overflow-hidden p-1 animate-fade-in"
+          style={{ background: '#12121f', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 22px 55px -14px rgba(0,0,0,0.7)' }}
+        >
+          {options.map(o => {
+            const sel = o.value === value;
+            return (
+              <button
+                key={o.value}
+                type="button"
+                role="option"
+                aria-selected={sel}
+                onClick={() => { onChange(o.value); setOpen(false); }}
+                className={`w-full text-left px-3 py-2 rounded-lg text-[13.5px] transition-colors ${sel ? 'text-white' : 'text-slate-300'} hover:bg-white/[0.07]`}
+                style={sel ? { background: 'rgba(99,102,241,0.20)' } : undefined}
+              >
+                {o.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 };
 
 // ─── Small primitives ────────────────────────────────────────────────────────
@@ -104,12 +173,12 @@ const LeadModal: React.FC<{ lead: Lead; onClose: () => void }> = ({ lead, onClos
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-4 sm:p-6 overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
       style={{ background: 'rgba(3,3,12,0.72)', backdropFilter: 'blur(4px)' }}
       onClick={onClose}
     >
       <div
-        className="card-premium w-full max-w-2xl my-4"
+        className="card-premium w-full max-w-2xl max-h-[88vh] overflow-y-auto"
         style={{ padding: 0 }}
         onClick={e => e.stopPropagation()}
       >
@@ -481,38 +550,35 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
               placeholder="Search name, email, company, role, industry…"
               className="input-premium block w-full"
             />
-            <select
+            <Select
+              ariaLabel="View mode"
+              minWidth={186}
               value={viewMode === 'custom' ? 'recent' : viewMode}
-              onChange={e => setViewMode(e.target.value as ViewMode)}
-              className={selectCls}
-              style={selectBg}
-              aria-label="View mode"
-            >
-              {VIEW_MODES.map(v => <option key={v.key} value={v.key}>{v.label}</option>)}
-            </select>
-            <select
+              onChange={v => setViewMode(v as ViewMode)}
+              options={VIEW_MODES.map(v => ({ value: v.key, label: v.label }))}
+            />
+            <Select
+              ariaLabel="Filter by source"
               value={editionFilter}
-              onChange={e => setEditionFilter(e.target.value as typeof editionFilter)}
-              className={selectCls}
-              style={selectBg}
-              aria-label="Filter by source"
-            >
-              <option value="">All sources</option>
-              <option value="scaling-up">Scaling Up only</option>
-              <option value="caio">CAIO only</option>
-            </select>
-            <select
+              onChange={v => setEditionFilter(v as typeof editionFilter)}
+              options={[
+                { value: '', label: 'All sources' },
+                { value: 'scaling-up', label: 'Scaling Up only' },
+                { value: 'caio', label: 'CAIO only' },
+              ]}
+            />
+            <Select
+              ariaLabel="Filter by tier"
+              minWidth={130}
               value={tierFilter}
-              onChange={e => setTierFilter(e.target.value as typeof tierFilter)}
-              className={selectCls}
-              style={selectBg}
-              aria-label="Filter by tier"
-            >
-              <option value="">All tiers</option>
-              <option value="Leader">Leader</option>
-              <option value="Adopter">Adopter</option>
-              <option value="Explorer">Explorer</option>
-            </select>
+              onChange={v => setTierFilter(v as typeof tierFilter)}
+              options={[
+                { value: '', label: 'All tiers' },
+                { value: 'Leader', label: 'Leader' },
+                { value: 'Adopter', label: 'Adopter' },
+                { value: 'Explorer', label: 'Explorer' },
+              ]}
+            />
             {(filter || tierFilter || editionFilter || viewMode !== 'recent') && (
               <button
                 onClick={() => { setFilter(''); setTierFilter(''); setEditionFilter(''); setViewMode('recent'); }}
@@ -547,15 +613,13 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
                   <ThSort label="Score"   onClick={() => toggleSort('pct')}          active={custom && sortKey === 'pct'} dir={sortDir} />
                   <th className="px-4 py-3">Source</th>
                   <ThSort label="Company" onClick={() => toggleSort('company')}      active={custom && sortKey === 'company'} dir={sortDir} />
-                  <th className="px-4 py-3">Role</th>
-                  <th className="px-4 py-3">Industry</th>
-                  <th className="px-4 py-3">PDF</th>
+                  <th className="px-4 py-3 text-right">Report</th>
                 </tr>
               </thead>
               <tbody className="text-slate-300">
                 {!loading && filtered.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="px-4 py-10 text-center text-slate-500 text-[13px]">
+                    <td colSpan={8} className="px-4 py-10 text-center text-slate-500 text-[13px]">
                       {leads.length === 0 ? 'No leads yet.' : 'No leads match those filters.'}
                     </td>
                   </tr>
@@ -575,16 +639,20 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
                     <td className="px-4 py-3"><TierPill tier={lead.tier} /></td>
                     <td className="px-4 py-3 tabular text-white">{lead.pct ? `${lead.pct}%` : '—'}</td>
                     <td className="px-4 py-3"><SourcePill edition={lead.edition} /></td>
-                    <td className="px-4 py-3 max-w-[180px] truncate">{lead.company || '—'}</td>
-                    <td className="px-4 py-3 max-w-[160px] truncate text-slate-400">{lead.role || '—'}</td>
-                    <td className="px-4 py-3 max-w-[140px] truncate text-slate-400">{lead.industry || '—'}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 max-w-[220px] truncate">{lead.company || '—'}</td>
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
                       {lead.pdfUrl
                         ? <a
                             href={lead.pdfUrl} target="_blank" rel="noopener noreferrer"
                             onClick={e => e.stopPropagation()}
-                            className="text-indigo-300 hover:text-indigo-200 underline underline-offset-2 text-[12.5px]"
-                          >Open</a>
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px] font-medium text-indigo-200 border transition-colors hover:bg-indigo-500/10"
+                            style={{ borderColor: 'rgba(129,140,248,0.3)', background: 'rgba(129,140,248,0.06)' }}
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                            </svg>
+                            PDF
+                          </a>
                         : <span className="text-slate-600">—</span>}
                     </td>
                   </tr>
