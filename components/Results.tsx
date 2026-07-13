@@ -4,9 +4,10 @@ import { readAttribution } from '../services/attribution';
 import { track, identify } from '../services/analytics';
 import { Answers } from '../types';
 
-// Booking URLs — the Scaling Up edition points at Dani's calendar by default.
-// Both are overridable via Vite env vars so the URLs can be updated without a
-// code change.
+// Booking URLs for the on-page "Book Your AI Strategy Briefing" CTA.
+// CAIO leads book the generic executive briefing; Scaling Up leads book with
+// Dani specifically. Both are overridable via Vite env vars so the URLs can be
+// updated without a code change.
 const DEFAULT_BOOKING_URL =
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ((import.meta as any).env?.VITE_BOOKING_URL as string | undefined)?.trim()
@@ -14,7 +15,7 @@ const DEFAULT_BOOKING_URL =
 const SCALING_UP_BOOKING_URL =
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ((import.meta as any).env?.VITE_SCALING_UP_BOOKING_URL as string | undefined)?.trim()
-  || DEFAULT_BOOKING_URL;
+  || 'https://api.leadconnectorhq.com/widget/bookings/meetcaiodani';
 
 interface ResultsProps {
   score: number;

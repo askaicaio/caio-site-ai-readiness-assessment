@@ -20,7 +20,14 @@ const MAILERLITE_TIER_GROUPS: Record<string, string> = {
   Leader:   'AI Readiness - Leader',
 };
 const GHL_WEBHOOK_URL = 'https://services.leadconnectorhq.com/hooks/FgaFLGYrbGZSBVprTkhR/webhook-trigger/elWtYyahvdVemgjf2SBn';
-const BOOKING_URL = 'https://api.leadconnectorhq.com/widget/bookings/b2b-executive-briefing';
+// Booking links for the "Book Your AI Strategy Briefing" CTA in the PDF.
+// CAIO leads book the generic executive briefing; Scaling Up leads book with
+// Dani specifically. Both are env-overridable so the URLs can change without a
+// code deploy.
+const BOOKING_URL = process.env.BOOKING_URL?.trim()
+  || 'https://api.leadconnectorhq.com/widget/bookings/b2b-executive-briefing';
+const SCALING_UP_BOOKING_URL = process.env.SCALING_UP_BOOKING_URL?.trim()
+  || 'https://api.leadconnectorhq.com/widget/bookings/meetcaiodani';
 
 // ─── Colours ────────────────────────────────────────────────────────────────
 const INDIGO  = '#4f46e5';
@@ -191,12 +198,13 @@ interface DocProps {
   sections: { title: string; blocks: Block[] }[];
   company?: string; role?: string; industry?: string; companySize?: string;
   logoSrc: string;
+  bookingUrl: string;
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const e = React.createElement;
 
-function buildPdf({ name, score, maxScore, tier, tierColor, date, sections, company, role, industry, companySize, logoSrc }: DocProps) {
+function buildPdf({ name, score, maxScore, tier, tierColor, date, sections, company, role, industry, companySize, logoSrc, bookingUrl }: DocProps) {
   const pct = Math.round((score / maxScore) * 100);
 
   const logoEl = (w: number) =>
@@ -288,7 +296,7 @@ function buildPdf({ name, score, maxScore, tier, tierColor, date, sections, comp
     e(Text as any, { style: s.ctaBody },
       "Your report outlines the priorities — but knowing what to do and knowing how to do it are two different things. Book a complimentary AI Strategy Briefing with a fractional Chief AI Officer from ChiefAIOfficer.com and get a clear, actionable path forward for your organisation."
     ),
-    e(Link as any, { src: BOOKING_URL, style: { textDecoration: 'none' } },
+    e(Link as any, { src: bookingUrl, style: { textDecoration: 'none' } },
       e(View as any, { style: s.ctaBtn },
         e(Text as any, { style: s.ctaBtnText }, 'Book Your Free AI Strategy Briefing'),
       )
@@ -790,7 +798,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let pdfUrl = '';
   try {
     const buffer = await renderToBuffer(
-      buildPdf({ name, score, maxScore, tier, tierColor, date, sections, company, role, industry, companySize, logoSrc }) as any
+      buildPdf({
+        name, score, maxScore, tier, tierColor, date, sections,
+        company, role, industry, companySize, logoSrc,
+        bookingUrl: isScalingUp ? SCALING_UP_BOOKING_URL : BOOKING_URL,
+      }) as any
     );
     // Branded filename. Vercel Blob derives the browser's save-as filename from
     // the pathname's final segment (it appends a random suffix to the URL only,
