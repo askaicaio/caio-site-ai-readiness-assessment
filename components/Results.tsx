@@ -3,6 +3,7 @@ import { getAIAssessment } from '../services/claudeService';
 import { readAttribution } from '../services/attribution';
 import { track, identify } from '../services/analytics';
 import { Answers } from '../types';
+import { SURVEY_QUESTIONS } from '../constants';
 
 // Booking URLs for the on-page "Book Your AI Strategy Briefing" CTA.
 // CAIO leads book the generic executive briefing; Scaling Up leads book with
@@ -338,6 +339,13 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
       return;
     }
 
+    // Full per-question answer detail for the leads portal. Built here (the
+    // client already has SURVEY_QUESTIONS) so the backend can store a complete
+    // record without needing to re-map question ids to their text.
+    const answersDetailed = SURVEY_QUESTIONS
+      .filter(q => q.type === 'radio' && answers[q.id])
+      .map(q => ({ question: q.text, answer: answers[q.id] }));
+
     // Capture lead + generate PDF
     try {
       const attribution = readAttribution();
@@ -352,9 +360,14 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
           // which marketing channel/email actually delivered the lead.
           attribution,
           // Which edition the submission came from. The backend uses this to
-          // pick the right GHL webhook, skip MailerLite for partner editions,
-          // and send the confirmation email directly via Resend instead.
+          // pick the right GHL webhook + stamp the edition on the lead record.
           source,
+          // Full detail for the Scaling Up leads portal: every radio answer,
+          // plus the optional personalisation fields the respondent filled.
+          answersDetailed,
+          primaryGoal: primaryGoals.join(', '),
+          biggestChallenge,
+          aiTools,
         }),
       });
       const data = await res.json();

@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
+interface QA { question: string; answer: string }
+
 interface Lead {
   id: string;
   email: string;
@@ -14,7 +16,25 @@ interface Lead {
   pdfUrl: string;
   edition: string;
   groups: string[];
+  utmSource?: string;
+  utmCampaign?: string;
+  referer?: string;
+  primaryGoal?: string;
+  biggestChallenge?: string;
+  aiTools?: string;
+  answers?: QA[];
 }
+
+// Human labels for the source/edition. edition maps 1:1 to which link the
+// respondent finished on: /scaling-up vs /.
+const editionLabel = (e?: string): string =>
+  e === 'scaling-up' ? 'Scaling Up' : e === 'caio' ? 'CAIO' : '';
+
+// Shared <select> styling (dark, custom chevron) used across the filter row.
+const selectCls = 'input-premium block appearance-none pr-9 cursor-pointer bg-no-repeat bg-[right_0.85rem_center] bg-[length:14px_14px]';
+const selectBg: React.CSSProperties = {
+  backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")",
+};
 
 // ─── Small primitives ────────────────────────────────────────────────────────
 const SubtleCard: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
@@ -43,6 +63,138 @@ const TierPill: React.FC<{ tier: string }> = ({ tier }) => {
     >
       {tier || '—'}
     </span>
+  );
+};
+
+const SourcePill: React.FC<{ edition?: string }> = ({ edition }) => {
+  const label = editionLabel(edition);
+  if (!label) return <span className="text-slate-600">—</span>;
+  const su = edition === 'scaling-up';
+  const c = su
+    ? { fg: '#d8b4fe', bg: 'rgba(192,132,252,0.14)', border: 'rgba(192,132,252,0.35)' }
+    : { fg: '#c7d2fe', bg: 'rgba(129,140,248,0.14)', border: 'rgba(129,140,248,0.35)' };
+  return (
+    <span
+      className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.1em] border whitespace-nowrap"
+      style={{ color: c.fg, background: c.bg, borderColor: c.border }}
+    >
+      {su ? 'Scaling Up' : 'CAIO'}
+    </span>
+  );
+};
+
+// ─── Lead detail modal ────────────────────────────────────────────────────────
+const Field: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
+  <div>
+    <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 mb-1">{label}</div>
+    <div className="text-[13.5px] text-slate-200 break-words">{children || <span className="text-slate-600">—</span>}</div>
+  </div>
+);
+
+const LeadModal: React.FC<{ lead: Lead; onClose: () => void }> = ({ lead, onClose }) => {
+  // Close on Escape.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const source = editionLabel(lead.edition);
+  const utm = [lead.utmSource, lead.utmCampaign].filter(Boolean).join(' · ');
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-4 sm:p-6 overflow-y-auto"
+      style={{ background: 'rgba(3,3,12,0.72)', backdropFilter: 'blur(4px)' }}
+      onClick={onClose}
+    >
+      <div
+        className="card-premium w-full max-w-2xl my-4"
+        style={{ padding: 0 }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 p-6 sm:p-7 border-b border-white/[0.07]">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2.5 flex-wrap mb-2">
+              <TierPill tier={lead.tier} />
+              <SourcePill edition={lead.edition} />
+              {lead.pct && <span className="text-[13px] text-slate-400 tabular">{lead.pct}% readiness</span>}
+            </div>
+            <h3 className="display-2 text-[24px] truncate">{lead.name || 'Unnamed lead'}</h3>
+            <a href={`mailto:${lead.email}`} className="text-[13.5px] text-indigo-300 hover:text-indigo-200 break-all">{lead.email}</a>
+          </div>
+          <button onClick={onClose} className="btn-ghost text-[13px] flex-shrink-0" aria-label="Close">✕</button>
+        </div>
+
+        {/* Body */}
+        <div className="p-6 sm:p-7 space-y-7">
+          {/* Profile */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-5 gap-y-4">
+            <Field label="Company">{lead.company}</Field>
+            <Field label="Role">{lead.role}</Field>
+            <Field label="Industry">{lead.industry}</Field>
+            <Field label="Company Size">{lead.companySize}</Field>
+            <Field label="Submitted">
+              {lead.subscribedAt ? new Date(lead.subscribedAt).toLocaleString() : ''}
+            </Field>
+            <Field label="Source / Link">{source}</Field>
+          </div>
+
+          {/* Attribution — only when we have it */}
+          {utm && (
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 mb-2">Campaign attribution</div>
+              <div className="text-[13px] text-slate-300 font-mono break-all">{utm}</div>
+            </div>
+          )}
+
+          {/* Personalisation */}
+          {(lead.primaryGoal || lead.biggestChallenge || lead.aiTools) && (
+            <div className="space-y-4">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">Personalisation</div>
+              <Field label="Primary AI Goals">{lead.primaryGoal}</Field>
+              <Field label="Biggest Challenge">{lead.biggestChallenge}</Field>
+              <Field label="AI Tools in Use">{lead.aiTools}</Field>
+            </div>
+          )}
+
+          {/* Answers */}
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 mb-3">
+              Assessment answers {lead.answers && lead.answers.length > 0 ? `(${lead.answers.length})` : ''}
+            </div>
+            {lead.answers && lead.answers.length > 0 ? (
+              <ol className="space-y-2.5">
+                {lead.answers.map((qa, i) => (
+                  <li key={i} className="flex gap-3">
+                    <span className="flex-shrink-0 inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/[0.05] text-slate-400 text-[11px] font-semibold tabular mt-0.5">{i + 1}</span>
+                    <div className="flex-1">
+                      <div className="text-[13px] text-slate-300 leading-snug">{qa.question}</div>
+                      <div className="text-[13.5px] text-white font-medium mt-0.5">{qa.answer}</div>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="text-[13px] text-slate-500 leading-relaxed">
+                No detailed answers on file — this lead predates answer capture. Their profile + score above is everything we have. New submissions store every answer.
+              </p>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-3 pt-1">
+            {lead.pdfUrl && (
+              <a href={lead.pdfUrl} target="_blank" rel="noopener noreferrer" className="btn-primary text-[13.5px]">
+                Open Full Report (PDF)
+              </a>
+            )}
+            <button onClick={onClose} className="btn-ghost text-[13px]">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 };
 
@@ -133,20 +285,28 @@ const LoginScreen: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) => {
 };
 
 // ─── CSV helpers ─────────────────────────────────────────────────────────────
-const CSV_COLUMNS: Array<{ key: keyof Lead | 'groupsList'; label: string }> = [
-  { key: 'subscribedAt', label: 'Subscribed At (UTC)' },
-  { key: 'name',         label: 'Name' },
-  { key: 'email',        label: 'Email' },
-  { key: 'tier',         label: 'Tier' },
-  { key: 'pct',          label: 'Score %' },
-  { key: 'company',      label: 'Company' },
-  { key: 'role',         label: 'Role' },
-  { key: 'industry',     label: 'Industry' },
-  { key: 'companySize',  label: 'Company Size' },
-  { key: 'edition',      label: 'Edition' },
-  { key: 'pdfUrl',       label: 'PDF URL' },
-  { key: 'groupsList',   label: 'MailerLite Groups' },
-  { key: 'id',           label: 'MailerLite ID' },
+// Each column has a getter so computed columns (source label, joined answers)
+// are handled uniformly.
+const CSV_COLUMNS: Array<{ label: string; get: (l: Lead) => string }> = [
+  { label: 'Subscribed At (UTC)', get: l => l.subscribedAt },
+  { label: 'Name',                get: l => l.name },
+  { label: 'Email',               get: l => l.email },
+  { label: 'Tier',                get: l => l.tier },
+  { label: 'Score %',             get: l => l.pct },
+  { label: 'Source',              get: l => editionLabel(l.edition) },
+  { label: 'Company',             get: l => l.company },
+  { label: 'Role',                get: l => l.role },
+  { label: 'Industry',            get: l => l.industry },
+  { label: 'Company Size',        get: l => l.companySize },
+  { label: 'UTM Source',          get: l => l.utmSource || '' },
+  { label: 'UTM Campaign',        get: l => l.utmCampaign || '' },
+  { label: 'Primary Goals',       get: l => l.primaryGoal || '' },
+  { label: 'Biggest Challenge',   get: l => l.biggestChallenge || '' },
+  { label: 'AI Tools',            get: l => l.aiTools || '' },
+  { label: 'Answers',             get: l => (l.answers || []).map(a => `${a.question} → ${a.answer}`).join(' | ') },
+  { label: 'PDF URL',             get: l => l.pdfUrl },
+  { label: 'MailerLite Groups',   get: l => l.groups.join(' | ') },
+  { label: 'MailerLite ID',       get: l => l.id },
 ];
 
 function csvEscape(v: string): string {
@@ -158,10 +318,7 @@ function csvEscape(v: string): string {
 
 function leadsToCsv(leads: Lead[]): string {
   const header = CSV_COLUMNS.map(c => c.label).join(',');
-  const rows = leads.map(lead => CSV_COLUMNS.map(c => {
-    if (c.key === 'groupsList') return csvEscape(lead.groups.join(' | '));
-    return csvEscape((lead[c.key as keyof Lead] as string) ?? '');
-  }).join(','));
+  const rows = leads.map(lead => CSV_COLUMNS.map(c => csvEscape(c.get(lead) ?? '')).join(','));
   return [header, ...rows].join('\n');
 }
 
@@ -179,6 +336,17 @@ function downloadCsv(csv: string, filename: string) {
 
 // ─── Leads table ─────────────────────────────────────────────────────────────
 type SortKey = 'subscribedAt' | 'name' | 'tier' | 'pct' | 'company';
+type ViewMode = 'recent' | 'tier' | 'score' | 'custom';
+
+// Readiness rank so "By tier" sorts Leader → Adopter → Explorer (hottest first)
+// rather than alphabetically.
+const TIER_RANK: Record<string, number> = { Leader: 3, Adopter: 2, Explorer: 1 };
+
+const VIEW_MODES: Array<{ key: ViewMode; label: string }> = [
+  { key: 'recent', label: 'Default (newest)' },
+  { key: 'tier',   label: 'By tier (Leader first)' },
+  { key: 'score',  label: 'By score (high → low)' },
+];
 
 const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const [leads, setLeads]     = useState<Lead[]>([]);
@@ -187,9 +355,12 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const [fetchedAt, setFetchedAt] = useState('');
   const [filter, setFilter]   = useState('');
   const [tierFilter, setTierFilter] = useState<'' | 'Explorer' | 'Adopter' | 'Leader'>('');
-  const [editionFilter, setEditionFilter] = useState<'' | 'scaling-up' | 'caio'>('scaling-up');
+  // Default to "All editions" so pre-tracking leads (blank edition) still show.
+  const [editionFilter, setEditionFilter] = useState<'' | 'scaling-up' | 'caio'>('');
+  const [viewMode, setViewMode] = useState<ViewMode>('recent');
   const [sortKey, setSortKey] = useState<SortKey>('subscribedAt');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [selected, setSelected] = useState<Lead | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -215,34 +386,42 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
 
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
+    const pctNum = (l: Lead) => Number(l.pct) || 0;
     return leads
       .filter(l => {
         if (tierFilter && l.tier !== tierFilter) return false;
-        if (editionFilter) {
-          // Old records may have a blank edition — only include them when the
-          // filter is "all". Otherwise strict match on the field value.
-          if (!l.edition) return false;
-          if (l.edition !== editionFilter) return false;
-        }
+        // Strict edition match only when a specific edition is selected.
+        if (editionFilter && l.edition !== editionFilter) return false;
         if (!q) return true;
         return [l.name, l.email, l.company, l.role, l.industry]
           .some(v => v && v.toLowerCase().includes(q));
       })
       .sort((a, b) => {
+        // View modes take precedence over column sorting.
+        if (viewMode === 'tier') {
+          const d = (TIER_RANK[b.tier] || 0) - (TIER_RANK[a.tier] || 0);
+          return d !== 0 ? d : pctNum(b) - pctNum(a);
+        }
+        if (viewMode === 'score') return pctNum(b) - pctNum(a);
+        if (viewMode === 'recent') return a.subscribedAt < b.subscribedAt ? 1 : -1;
+        // 'custom' — driven by a clicked column header.
+        if (sortKey === 'pct') {
+          return sortDir === 'asc' ? pctNum(a) - pctNum(b) : pctNum(b) - pctNum(a);
+        }
+        if (sortKey === 'tier') {
+          const d = (TIER_RANK[a.tier] || 0) - (TIER_RANK[b.tier] || 0);
+          return sortDir === 'asc' ? d : -d;
+        }
         const av = (a[sortKey] || '') as string;
         const bv = (b[sortKey] || '') as string;
-        if (sortKey === 'pct') {
-          const an = Number(av) || 0;
-          const bn = Number(bv) || 0;
-          return sortDir === 'asc' ? an - bn : bn - an;
-        }
         if (av === bv) return 0;
         return sortDir === 'asc' ? (av < bv ? -1 : 1) : (av < bv ? 1 : -1);
       });
-  }, [leads, filter, tierFilter, editionFilter, sortKey, sortDir]);
+  }, [leads, filter, tierFilter, editionFilter, viewMode, sortKey, sortDir]);
 
   const toggleSort = (k: SortKey) => {
-    if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    setViewMode('custom');
+    if (sortKey === k && viewMode === 'custom') setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortKey(k); setSortDir(k === 'subscribedAt' || k === 'pct' ? 'desc' : 'asc'); }
   };
 
@@ -258,8 +437,11 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
     onLogout();
   };
 
+  const custom = viewMode === 'custom';
+
   return (
     <div className="min-h-screen animate-fade-in">
+      {selected && <LeadModal lead={selected} onClose={() => setSelected(null)} />}
       <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 pt-12 pb-24">
 
         {/* Header */}
@@ -268,7 +450,9 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
             <span className="kicker text-slate-500">Scaling Up · Team Portal</span>
             <h1 className="display-2 mt-2.5">Assessment leads</h1>
             <p className="text-[13.5px] text-slate-400 mt-2 leading-relaxed">
-              {loading ? 'Loading…' : `${leads.length} lead${leads.length === 1 ? '' : 's'} in MailerLite`}
+              {loading
+                ? 'Loading…'
+                : <>{filtered.length}{filtered.length !== leads.length ? ` of ${leads.length}` : ''} lead{leads.length === 1 ? '' : 's'}</>}
               {fetchedAt && !loading && (
                 <span className="text-slate-500"> · fetched {new Date(fetchedAt).toLocaleString()}</span>
               )}
@@ -287,9 +471,9 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
           </div>
         </div>
 
-        {/* Filters */}
+        {/* Filters + view mode */}
         <SubtleCard className="!p-4 sm:!p-5 mb-5">
-          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-3 items-center">
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto_auto] gap-3 items-center">
             <input
               type="search"
               value={filter}
@@ -298,21 +482,30 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
               className="input-premium block w-full"
             />
             <select
+              value={viewMode === 'custom' ? 'recent' : viewMode}
+              onChange={e => setViewMode(e.target.value as ViewMode)}
+              className={selectCls}
+              style={selectBg}
+              aria-label="View mode"
+            >
+              {VIEW_MODES.map(v => <option key={v.key} value={v.key}>{v.label}</option>)}
+            </select>
+            <select
               value={editionFilter}
               onChange={e => setEditionFilter(e.target.value as typeof editionFilter)}
-              className="input-premium block appearance-none pr-9 cursor-pointer bg-no-repeat bg-[right_0.85rem_center] bg-[length:14px_14px]"
-              style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")" }}
-              aria-label="Filter by edition"
+              className={selectCls}
+              style={selectBg}
+              aria-label="Filter by source"
             >
+              <option value="">All sources</option>
               <option value="scaling-up">Scaling Up only</option>
               <option value="caio">CAIO only</option>
-              <option value="">All editions</option>
             </select>
             <select
               value={tierFilter}
               onChange={e => setTierFilter(e.target.value as typeof tierFilter)}
-              className="input-premium block appearance-none pr-9 cursor-pointer bg-no-repeat bg-[right_0.85rem_center] bg-[length:14px_14px]"
-              style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")" }}
+              className={selectCls}
+              style={selectBg}
               aria-label="Filter by tier"
             >
               <option value="">All tiers</option>
@@ -320,8 +513,11 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
               <option value="Adopter">Adopter</option>
               <option value="Explorer">Explorer</option>
             </select>
-            {(filter || tierFilter || editionFilter !== 'scaling-up') && (
-              <button onClick={() => { setFilter(''); setTierFilter(''); setEditionFilter('scaling-up'); }} className="btn-ghost text-[13px]">
+            {(filter || tierFilter || editionFilter || viewMode !== 'recent') && (
+              <button
+                onClick={() => { setFilter(''); setTierFilter(''); setEditionFilter(''); setViewMode('recent'); }}
+                className="btn-ghost text-[13px]"
+              >
                 Reset
               </button>
             )}
@@ -344,13 +540,13 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
               <thead>
                 <tr className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-slate-500"
                     style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-                  <ThSort label="Date"    onClick={() => toggleSort('subscribedAt')} active={sortKey === 'subscribedAt'} dir={sortDir} />
-                  <ThSort label="Name"    onClick={() => toggleSort('name')}         active={sortKey === 'name'} dir={sortDir} />
+                  <ThSort label="Date"    onClick={() => toggleSort('subscribedAt')} active={custom && sortKey === 'subscribedAt'} dir={sortDir} />
+                  <ThSort label="Name"    onClick={() => toggleSort('name')}         active={custom && sortKey === 'name'} dir={sortDir} />
                   <th className="px-4 py-3">Email</th>
-                  <ThSort label="Tier"    onClick={() => toggleSort('tier')}         active={sortKey === 'tier'} dir={sortDir} />
-                  <ThSort label="Score"   onClick={() => toggleSort('pct')}          active={sortKey === 'pct'} dir={sortDir} />
-                  <th className="px-4 py-3">Edition</th>
-                  <ThSort label="Company" onClick={() => toggleSort('company')}      active={sortKey === 'company'} dir={sortDir} />
+                  <ThSort label="Tier"    onClick={() => toggleSort('tier')}         active={custom && sortKey === 'tier'} dir={sortDir} />
+                  <ThSort label="Score"   onClick={() => toggleSort('pct')}          active={custom && sortKey === 'pct'} dir={sortDir} />
+                  <th className="px-4 py-3">Source</th>
+                  <ThSort label="Company" onClick={() => toggleSort('company')}      active={custom && sortKey === 'company'} dir={sortDir} />
                   <th className="px-4 py-3">Role</th>
                   <th className="px-4 py-3">Industry</th>
                   <th className="px-4 py-3">PDF</th>
@@ -360,13 +556,17 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
                 {!loading && filtered.length === 0 && (
                   <tr>
                     <td colSpan={10} className="px-4 py-10 text-center text-slate-500 text-[13px]">
-                      {leads.length === 0 ? 'No subscribers in MailerLite yet.' : 'No leads match those filters.'}
+                      {leads.length === 0 ? 'No leads yet.' : 'No leads match those filters.'}
                     </td>
                   </tr>
                 )}
                 {filtered.map(lead => (
-                  <tr key={lead.id} className="hover:bg-white/[0.02] transition-colors"
-                      style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                  <tr
+                    key={lead.id}
+                    onClick={() => setSelected(lead)}
+                    className="hover:bg-white/[0.03] transition-colors cursor-pointer"
+                    style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}
+                  >
                     <td className="px-4 py-3 whitespace-nowrap text-slate-400 tabular">
                       {lead.subscribedAt ? new Date(lead.subscribedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' }) : '—'}
                     </td>
@@ -374,15 +574,17 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
                     <td className="px-4 py-3 text-slate-400 max-w-[220px] truncate">{lead.email}</td>
                     <td className="px-4 py-3"><TierPill tier={lead.tier} /></td>
                     <td className="px-4 py-3 tabular text-white">{lead.pct ? `${lead.pct}%` : '—'}</td>
-                    <td className="px-4 py-3 text-[12px] uppercase tracking-wider text-slate-400">
-                      {lead.edition === 'scaling-up' ? 'SU' : lead.edition === 'caio' ? 'CAIO' : '—'}
-                    </td>
+                    <td className="px-4 py-3"><SourcePill edition={lead.edition} /></td>
                     <td className="px-4 py-3 max-w-[180px] truncate">{lead.company || '—'}</td>
                     <td className="px-4 py-3 max-w-[160px] truncate text-slate-400">{lead.role || '—'}</td>
                     <td className="px-4 py-3 max-w-[140px] truncate text-slate-400">{lead.industry || '—'}</td>
                     <td className="px-4 py-3">
                       {lead.pdfUrl
-                        ? <a href={lead.pdfUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-300 hover:text-indigo-200 underline underline-offset-2 text-[12.5px]">Open</a>
+                        ? <a
+                            href={lead.pdfUrl} target="_blank" rel="noopener noreferrer"
+                            onClick={e => e.stopPropagation()}
+                            className="text-indigo-300 hover:text-indigo-200 underline underline-offset-2 text-[12.5px]"
+                          >Open</a>
                         : <span className="text-slate-600">—</span>}
                     </td>
                   </tr>
@@ -392,8 +594,8 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
           </div>
         </div>
 
-        <p className="text-[11.5px] text-slate-500 text-center mt-6">
-          Data pulled live from MailerLite each refresh. Older leads may show a blank tier / score until they retake the assessment on the current build.
+        <p className="text-[11.5px] text-slate-500 text-center mt-6 leading-relaxed">
+          Click any row to see the lead's full profile, source, and every assessment answer. Data is pulled live each refresh. Leads that predate answer-capture show a blank tier / source until they retake the assessment on the current build.
         </p>
       </div>
     </div>

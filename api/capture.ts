@@ -772,6 +772,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     company, role, industry, companySize,
     attribution,
     source,
+    answersDetailed,
+    primaryGoal,
+    biggestChallenge,
+    aiTools,
   } = req.body as {
     name: string; email: string; score: number; maxScore: number; fullReport: string;
     company?: string; role?: string; industry?: string; companySize?: string;
@@ -783,6 +787,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // distinguish them via the Edition: {CAIO|Scaling Up} tag or the top-level
     // `edition` field for lead-assignment / notification purposes.
     source?: 'caio' | 'scaling-up';
+    // Full lead detail for the /scaling-up-leads portal (stored as a JSON
+    // sidecar in Blob). answersDetailed = every radio answer; the three
+    // personalisation fields are the optional deeper-form inputs.
+    answersDetailed?: { question: string; answer: string }[];
+    primaryGoal?: string;
+    biggestChallenge?: string;
+    aiTools?: string;
   };
   const isScalingUp = source === 'scaling-up';
 
@@ -795,6 +806,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const sections  = parseReport(fullReport || '');
   const logoSrc   = getLogoSrc();
 
+  // Branded slug shared by the PDF and the JSON sidecar.
+  const titleName = name.trim().replace(/\s+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).replace(/\s+/g, '-').replace(/[^A-Za-z0-9-]/g, '');
+  const isoDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const downloadName = `ChiefAIOfficer-AI-Readiness-Report-${titleName || 'Respondent'}-${isoDate}`;
+
   let pdfUrl = '';
   try {
     const buffer = await renderToBuffer(
@@ -804,13 +820,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         bookingUrl: isScalingUp ? SCALING_UP_BOOKING_URL : BOOKING_URL,
       }) as any
     );
-    // Branded filename. Vercel Blob derives the browser's save-as filename from
-    // the pathname's final segment (it appends a random suffix to the URL only,
-    // not to the Content-Disposition name), so we make the pathname itself the
-    // pretty, branded name. addRandomSuffix stays on (default) for unique URLs.
-    const titleName = name.trim().replace(/\s+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).replace(/\s+/g, '-').replace(/[^A-Za-z0-9-]/g, '');
-    const isoDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-    const downloadName = `ChiefAIOfficer-AI-Readiness-Report-${titleName || 'Respondent'}-${isoDate}`;
+    // Vercel Blob derives the browser's save-as filename from the pathname's
+    // final segment (the URL gets a random suffix; Content-Disposition uses the
+    // clean name), so the pathname itself is the pretty, branded name.
     const { url } = await put(`reports/${downloadName}.pdf`, buffer, {
       access: 'public',
       contentType: 'application/pdf',
@@ -819,6 +831,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('PDF generated:', pdfUrl);
   } catch (err) {
     console.error('PDF/Blob error:', err);
+  }
+
+  // ── Lead record sidecar (for the /scaling-up-leads portal) ───────────────
+  // Store a complete JSON record of this submission in Blob. The leads portal
+  // reads these back (server-side) and merges them with MailerLite so it can
+  // show every answer + the true source, without depending on MailerLite
+  // custom fields existing. Best-effort — a failure here never affects the
+  // user response or the email/GHL flow.
+  try {
+    const leadRecord = {
+      name, email,
+      company: company || '', role: role || '', industry: industry || '', companySize: companySize || '',
+      tier, pct, score, maxScore,
+      edition: isScalingUp ? 'scaling-up' : 'caio',
+      utmSource:   attribution?.utmSource   || '',
+      utmMedium:   attribution?.utmMedium    || '',
+      utmCampaign: attribution?.utmCampaign  || '',
+      utmContent:  attribution?.utmContent   || '',
+      utmTerm:     attribution?.utmTerm       || '',
+      referer:     attribution?.referer       || '',
+      primaryGoal: primaryGoal || '',
+      biggestChallenge: biggestChallenge || '',
+      aiTools: aiTools || '',
+      answers: Array.isArray(answersDetailed) ? answersDetailed : [],
+      pdfUrl,
+      date,
+      submittedAt: new Date().toISOString(),
+    };
+    await put(`leads/${downloadName}.json`, JSON.stringify(leadRecord), {
+      access: 'public',
+      contentType: 'application/json',
+    });
+    console.log('[leads] record stored for', email);
+  } catch (err) {
+    console.error('[leads] record store error:', err);
   }
 
   // Build tags from tier + attribution (see buildTagsFor for the full scheme).

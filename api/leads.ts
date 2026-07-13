@@ -27,6 +27,7 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createHmac, timingSafeEqual } from 'crypto';
+import { list } from '@vercel/blob';
 
 export const config = { maxDuration: 30 };
 
@@ -79,6 +80,8 @@ interface MlSubscriber {
   groups?: Array<{ id?: string; name?: string } | string>;
 }
 
+interface QA { question: string; answer: string }
+
 interface Lead {
   id: string;
   email: string;
@@ -93,6 +96,14 @@ interface Lead {
   pdfUrl: string;
   edition: string;
   groups: string[];
+  // Enriched from the Blob lead-record sidecar (blank for pre-tracking leads).
+  utmSource: string;
+  utmCampaign: string;
+  referer: string;
+  primaryGoal: string;
+  biggestChallenge: string;
+  aiTools: string;
+  answers: QA[];
 }
 
 function toLead(s: MlSubscriber): Lead {
@@ -118,6 +129,76 @@ function toLead(s: MlSubscriber): Lead {
     pdfUrl: asStr(fields.pdf_url),
     edition: asStr(fields.edition),
     groups,
+    utmSource: '', utmCampaign: '', referer: '',
+    primaryGoal: '', biggestChallenge: '', aiTools: '',
+    answers: [],
+  };
+}
+
+// ─── Blob lead-record sidecars ────────────────────────────────────────────────
+// Every submission writes a complete JSON record under leads/. We read them
+// back server-side (never exposed to the client except through this gated
+// endpoint) and key by lowercased email so we can enrich the MailerLite rows
+// with the true source + every answer.
+interface LeadRecord {
+  name?: string; email?: string;
+  company?: string; role?: string; industry?: string; companySize?: string;
+  tier?: string; pct?: number; score?: number; maxScore?: number;
+  edition?: string;
+  utmSource?: string; utmCampaign?: string; referer?: string;
+  primaryGoal?: string; biggestChallenge?: string; aiTools?: string;
+  answers?: QA[];
+  pdfUrl?: string; submittedAt?: string;
+}
+
+async function fetchLeadRecords(): Promise<Map<string, LeadRecord>> {
+  const map = new Map<string, LeadRecord>();
+  try {
+    const { blobs } = await list({ prefix: 'leads/', limit: 1000 });
+    const records = await Promise.all(blobs.map(async b => {
+      try {
+        const res = await fetch(b.url);
+        if (!res.ok) return null;
+        return (await res.json()) as LeadRecord;
+      } catch { return null; }
+    }));
+    for (const rec of records) {
+      const email = rec?.email?.trim().toLowerCase();
+      if (!email) continue;
+      const existing = map.get(email);
+      // Keep the newest record if the same email submitted more than once.
+      if (!existing || (rec!.submittedAt || '') > (existing.submittedAt || '')) {
+        map.set(email, rec!);
+      }
+    }
+  } catch (err) {
+    console.error('[leads] blob list error:', err);
+  }
+  return map;
+}
+
+function recordToLead(rec: LeadRecord): Lead {
+  return {
+    id: rec.submittedAt || rec.email || Math.random().toString(36).slice(2),
+    email: rec.email || '',
+    subscribedAt: rec.submittedAt || '',
+    name: rec.name || '',
+    company: rec.company || '',
+    role: rec.role || '',
+    industry: rec.industry || '',
+    companySize: rec.companySize || '',
+    tier: rec.tier || '',
+    pct: rec.pct != null ? String(rec.pct) : '',
+    pdfUrl: rec.pdfUrl || '',
+    edition: rec.edition || '',
+    groups: [],
+    utmSource: rec.utmSource || '',
+    utmCampaign: rec.utmCampaign || '',
+    referer: rec.referer || '',
+    primaryGoal: rec.primaryGoal || '',
+    biggestChallenge: rec.biggestChallenge || '',
+    aiTools: rec.aiTools || '',
+    answers: Array.isArray(rec.answers) ? rec.answers : [],
   };
 }
 
@@ -197,7 +278,50 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const leads = await fetchAllSubscribers(apiKey);
+    // MailerLite is the base list (guarantees every existing subscriber shows).
+    // Blob records enrich each row with the true source + full answers, and add
+    // any lead that made it to Blob but not MailerLite (rare — e.g. an ML write
+    // that failed). Blob enrichment is best-effort: if it throws, we still
+    // return the MailerLite rows.
+    const [mlLeads, records] = await Promise.all([
+      fetchAllSubscribers(apiKey),
+      fetchLeadRecords(),
+    ]);
+
+    const seen = new Set<string>();
+    const leads: Lead[] = mlLeads.map(l => {
+      const key = l.email.trim().toLowerCase();
+      seen.add(key);
+      const rec = records.get(key);
+      if (!rec) return l;
+      // Prefer values we already have from ML; fill blanks + attach the rich
+      // fields that only exist in the Blob record.
+      return {
+        ...l,
+        tier:        l.tier    || rec.tier    || '',
+        pct:         l.pct     || (rec.pct != null ? String(rec.pct) : ''),
+        edition:     l.edition || rec.edition || '',
+        company:     l.company || rec.company || '',
+        role:        l.role    || rec.role    || '',
+        industry:    l.industry || rec.industry || '',
+        companySize: l.companySize || rec.companySize || '',
+        pdfUrl:      l.pdfUrl  || rec.pdfUrl  || '',
+        utmSource:   rec.utmSource   || '',
+        utmCampaign: rec.utmCampaign || '',
+        referer:     rec.referer     || '',
+        primaryGoal: rec.primaryGoal || '',
+        biggestChallenge: rec.biggestChallenge || '',
+        aiTools:     rec.aiTools || '',
+        answers:     Array.isArray(rec.answers) ? rec.answers : [],
+      };
+    });
+
+    // Union in Blob-only leads (not present in MailerLite).
+    for (const [key, rec] of records) {
+      if (!seen.has(key)) leads.push(recordToLead(rec));
+    }
+
+    leads.sort((a, b) => (a.subscribedAt < b.subscribedAt ? 1 : -1));
     return res.status(200).json({ leads, count: leads.length, fetchedAt: new Date().toISOString() });
   } catch (err) {
     console.error('[leads] fetch error:', err);
