@@ -87,7 +87,7 @@ const LoginScreen: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) => {
             className="mx-auto mb-8 h-9 sm:h-10 w-auto opacity-90"
           />
           <span className="kicker text-slate-500">Scaling Up · Restricted</span>
-          <h1 className="display-2 mt-3">Team leads portal</h1>
+          <h1 className="display-2 mt-3">Leads Portal</h1>
           <p className="lead mt-3 text-[14.5px]">
             Enter the team password to view and export your Scaling Up assessment leads.
           </p>
