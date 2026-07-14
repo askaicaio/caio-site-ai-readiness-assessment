@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 interface QA { question: string; answer: string }
 
@@ -152,6 +153,52 @@ const SourcePill: React.FC<{ edition?: string }> = ({ edition }) => {
   );
 };
 
+// ─── Internal / test-lead detection ───────────────────────────────────────────
+// Flags obvious internal + test submissions so the real leads stand out.
+const TEST_DOMAINS = ['chiefaiofficer.com', 'scalingup.com', '123.com'];
+const TEST_EMAILS  = ['dani@123.com', 'djneefe@gmail.com'];
+const TEST_NAMES   = ['daniel neefe', 'dani test', 'anna rozhko', 'anna broome', 'chris daigle', 'cedric kato'];
+
+function isTestLead(l: Pick<Lead, 'name' | 'email'>): boolean {
+  const email = (l.email || '').toLowerCase().trim();
+  const name  = (l.name  || '').toLowerCase().trim();
+  const domain = email.split('@')[1] || '';
+  if (TEST_DOMAINS.includes(domain)) return true;
+  if (TEST_EMAILS.includes(email)) return true;
+  if (/\btest\b/.test(name) || /test/.test(email)) return true;   // "TEST ONLY", "Dani Test"
+  if (name.includes('neefe')) return true;                        // Daniel Neefe / djneefe
+  if (TEST_NAMES.some(n => name.includes(n))) return true;
+  return false;
+}
+
+const TestBadge: React.FC = () => (
+  <span
+    className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-[0.12em] border flex-shrink-0"
+    style={{ color: '#fca5a5', background: 'rgba(251,113,133,0.12)', borderColor: 'rgba(251,113,133,0.35)' }}
+    title="Internal / test entry"
+  >
+    Test
+  </span>
+);
+
+// Report action — used both in the table (right of each row) and on board cards.
+const PdfButton: React.FC<{ url?: string; onClickCapture?: () => void }> = ({ url }) => {
+  if (!url) return <span className="text-slate-600 text-[13px]">—</span>;
+  return (
+    <a
+      href={url} target="_blank" rel="noopener noreferrer"
+      onClick={e => e.stopPropagation()}
+      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px] font-medium text-indigo-200 border transition-colors hover:bg-indigo-500/10 whitespace-nowrap"
+      style={{ borderColor: 'rgba(129,140,248,0.3)', background: 'rgba(129,140,248,0.06)' }}
+    >
+      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+      </svg>
+      PDF
+    </a>
+  );
+};
+
 // ─── Lead detail modal ────────────────────────────────────────────────────────
 const Field: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
   <div>
@@ -171,9 +218,13 @@ const LeadModal: React.FC<{ lead: Lead; onClose: () => void }> = ({ lead, onClos
   const source = editionLabel(lead.edition);
   const utm = [lead.utmSource, lead.utmCampaign].filter(Boolean).join(' · ');
 
-  return (
+  // Rendered through a portal into document.body so `position: fixed` is
+  // relative to the viewport — the page root has a transform (fade-in
+  // animation) which would otherwise become the containing block and push
+  // the "centered" modal off-centre.
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6"
       style={{ background: 'rgba(3,3,12,0.72)', backdropFilter: 'blur(4px)' }}
       onClick={onClose}
     >
@@ -188,6 +239,7 @@ const LeadModal: React.FC<{ lead: Lead; onClose: () => void }> = ({ lead, onClos
             <div className="flex items-center gap-2.5 flex-wrap mb-2">
               <TierPill tier={lead.tier} />
               <SourcePill edition={lead.edition} />
+              {isTestLead(lead) && <TestBadge />}
               {lead.pct && <span className="text-[13px] text-slate-400 tabular">{lead.pct}% readiness</span>}
             </div>
             <h3 className="display-2 text-[24px] truncate">{lead.name || 'Unnamed lead'}</h3>
@@ -263,7 +315,8 @@ const LeadModal: React.FC<{ lead: Lead; onClose: () => void }> = ({ lead, onClos
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
 
@@ -417,6 +470,36 @@ const VIEW_MODES: Array<{ key: ViewMode; label: string }> = [
   { key: 'score',  label: 'By score (high → low)' },
 ];
 
+// Shared grid template so the table header + each row's data area line up.
+// 8 data columns; the PDF button lives OUTSIDE this grid, to the right of
+// each row (see the render), so it's always visible without scrolling.
+const ROW_GRID: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns:
+    '96px minmax(110px,1.4fr) minmax(150px,1.7fr) 84px 60px 104px minmax(100px,1.2fr) minmax(90px,1fr)',
+  alignItems: 'center',
+};
+
+// Board (kanban) columns — one per tier, plus an "Unscored" bucket for leads
+// that predate tier capture.
+const BOARD_COLUMNS: Array<{ key: string; label: string; color: string; match: (t: string) => boolean }> = [
+  { key: 'Leader',   label: 'Leader',   color: '#34d399', match: t => t === 'Leader' },
+  { key: 'Adopter',  label: 'Adopter',  color: '#818cf8', match: t => t === 'Adopter' },
+  { key: 'Explorer', label: 'Explorer', color: '#fbbf24', match: t => t === 'Explorer' },
+  { key: 'Unscored', label: 'Unscored', color: '#94a3b8', match: t => !['Leader', 'Adopter', 'Explorer'].includes(t) },
+];
+
+const HEAD_CLS = 'px-2 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-slate-500';
+const HeaderBtn: React.FC<{ label: string; active: boolean; dir: 'asc' | 'desc'; onClick: () => void }> = ({ label, active, dir, onClick }) => (
+  <button
+    onClick={onClick}
+    className={`px-2 text-left inline-flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-[0.14em] transition-colors ${active ? 'text-indigo-300' : 'text-slate-500 hover:text-slate-300'}`}
+  >
+    <span>{label}</span>
+    <span className={`text-[9px] ${active ? 'opacity-100' : 'opacity-40'}`} aria-hidden="true">{active ? (dir === 'asc' ? '▲' : '▼') : '↕'}</span>
+  </button>
+);
+
 const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const [leads, setLeads]     = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -426,6 +509,7 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const [tierFilter, setTierFilter] = useState<'' | 'Explorer' | 'Adopter' | 'Leader'>('');
   // Default to "All editions" so pre-tracking leads (blank edition) still show.
   const [editionFilter, setEditionFilter] = useState<'' | 'scaling-up' | 'caio'>('');
+  const [layout, setLayout] = useState<'table' | 'board'>('table');
   const [viewMode, setViewMode] = useState<ViewMode>('recent');
   const [sortKey, setSortKey] = useState<SortKey>('subscribedAt');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
@@ -528,6 +612,19 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {/* Table / Board layout toggle */}
+            <div className="inline-flex rounded-lg p-0.5 mr-1" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              {(['table', 'board'] as const).map(m => (
+                <button
+                  key={m}
+                  onClick={() => setLayout(m)}
+                  className={`px-3 py-1.5 rounded-md text-[12.5px] font-medium transition-colors ${layout === m ? 'text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                  style={layout === m ? { background: 'rgba(99,102,241,0.28)' } : undefined}
+                >
+                  {m === 'table' ? 'Table' : 'Board'}
+                </button>
+              ))}
+            </div>
             <button onClick={load} disabled={loading} className="btn-ghost text-[13px]">
               {loading ? 'Refreshing…' : 'Refresh'}
             </button>
@@ -550,13 +647,15 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
               placeholder="Search name, email, company, role, industry…"
               className="input-premium block w-full"
             />
-            <Select
-              ariaLabel="View mode"
-              minWidth={186}
-              value={viewMode === 'custom' ? 'recent' : viewMode}
-              onChange={v => setViewMode(v as ViewMode)}
-              options={VIEW_MODES.map(v => ({ value: v.key, label: v.label }))}
-            />
+            {layout === 'table' && (
+              <Select
+                ariaLabel="Sort order"
+                minWidth={186}
+                value={viewMode === 'custom' ? 'recent' : viewMode}
+                onChange={v => setViewMode(v as ViewMode)}
+                options={VIEW_MODES.map(v => ({ value: v.key, label: v.label }))}
+              />
+            )}
             <Select
               ariaLabel="Filter by source"
               value={editionFilter}
@@ -596,93 +695,122 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
           </div>
         )}
 
-        {/* Table */}
-        <div
-          className="rounded-2xl overflow-hidden"
-          style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)' }}
-        >
-          <div className="overflow-x-auto">
-            <table className="w-full text-[13px] text-left">
-              <thead>
-                <tr className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-slate-500"
-                    style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-                  <ThSort label="Date"    onClick={() => toggleSort('subscribedAt')} active={custom && sortKey === 'subscribedAt'} dir={sortDir} />
-                  <ThSort label="Name"    onClick={() => toggleSort('name')}         active={custom && sortKey === 'name'} dir={sortDir} />
-                  <th className="px-4 py-3">Email</th>
-                  <ThSort label="Tier"    onClick={() => toggleSort('tier')}         active={custom && sortKey === 'tier'} dir={sortDir} />
-                  <ThSort label="Score"   onClick={() => toggleSort('pct')}          active={custom && sortKey === 'pct'} dir={sortDir} />
-                  <th className="px-4 py-3">Source</th>
-                  <ThSort label="Company" onClick={() => toggleSort('company')}      active={custom && sortKey === 'company'} dir={sortDir} />
-                  <th className="px-4 py-3 text-right">Report</th>
-                </tr>
-              </thead>
-              <tbody className="text-slate-300">
-                {!loading && filtered.length === 0 && (
-                  <tr>
-                    <td colSpan={8} className="px-4 py-10 text-center text-slate-500 text-[13px]">
-                      {leads.length === 0 ? 'No leads yet.' : 'No leads match those filters.'}
-                    </td>
-                  </tr>
-                )}
-                {filtered.map(lead => (
-                  <tr
-                    key={lead.id}
+        {/* ── TABLE view ─────────────────────────────────────────────────── */}
+        {layout === 'table' && (
+          <div className="rounded-2xl" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)' }}>
+            {/* Header — data columns align via ROW_GRID; the PDF column sits
+                OUTSIDE the data grid (fixed 76px) so it's always at the right. */}
+            <div className="flex items-center gap-3 px-3 sm:px-4 pt-3.5 pb-2.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+              <div className="flex-1" style={ROW_GRID}>
+                <HeaderBtn label="Date"    active={custom && sortKey === 'subscribedAt'} dir={sortDir} onClick={() => toggleSort('subscribedAt')} />
+                <HeaderBtn label="Name"    active={custom && sortKey === 'name'}         dir={sortDir} onClick={() => toggleSort('name')} />
+                <div className={HEAD_CLS}>Email</div>
+                <HeaderBtn label="Tier"    active={custom && sortKey === 'tier'}         dir={sortDir} onClick={() => toggleSort('tier')} />
+                <HeaderBtn label="Score"   active={custom && sortKey === 'pct'}          dir={sortDir} onClick={() => toggleSort('pct')} />
+                <div className={HEAD_CLS}>Source</div>
+                <HeaderBtn label="Company" active={custom && sortKey === 'company'}      dir={sortDir} onClick={() => toggleSort('company')} />
+                <div className={HEAD_CLS}>Industry</div>
+              </div>
+              <div className="w-[76px] flex-shrink-0" />
+            </div>
+
+            {(!loading && filtered.length === 0) ? (
+              <div className="px-4 py-12 text-center text-slate-500 text-[13px]">
+                {leads.length === 0 ? 'No leads yet.' : 'No leads match those filters.'}
+              </div>
+            ) : (
+              filtered.map(lead => (
+                <div key={lead.id} className="flex items-center gap-3 px-3 sm:px-4 py-1" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                  {/* Clickable data area (opens the modal) */}
+                  <div
                     onClick={() => setSelected(lead)}
-                    className="hover:bg-white/[0.03] transition-colors cursor-pointer"
-                    style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}
+                    className="flex-1 rounded-lg cursor-pointer transition-colors hover:bg-white/[0.03] text-[13px]"
+                    style={ROW_GRID}
                   >
-                    <td className="px-4 py-3 whitespace-nowrap text-slate-400 tabular">
+                    <div className="px-2 py-3 text-slate-400 tabular whitespace-nowrap text-[12.5px]">
                       {lead.subscribedAt ? new Date(lead.subscribedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' }) : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-white font-medium max-w-[200px] truncate">{lead.name || '—'}</td>
-                    <td className="px-4 py-3 text-slate-400 max-w-[220px] truncate">{lead.email}</td>
-                    <td className="px-4 py-3"><TierPill tier={lead.tier} /></td>
-                    <td className="px-4 py-3 tabular text-white">{lead.pct ? `${lead.pct}%` : '—'}</td>
-                    <td className="px-4 py-3"><SourcePill edition={lead.edition} /></td>
-                    <td className="px-4 py-3 max-w-[220px] truncate">{lead.company || '—'}</td>
-                    <td className="px-4 py-3 text-right whitespace-nowrap">
-                      {lead.pdfUrl
-                        ? <a
-                            href={lead.pdfUrl} target="_blank" rel="noopener noreferrer"
-                            onClick={e => e.stopPropagation()}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px] font-medium text-indigo-200 border transition-colors hover:bg-indigo-500/10"
-                            style={{ borderColor: 'rgba(129,140,248,0.3)', background: 'rgba(129,140,248,0.06)' }}
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-                            </svg>
-                            PDF
-                          </a>
-                        : <span className="text-slate-600">—</span>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                    <div className="px-2 py-3 min-w-0 flex items-center gap-2">
+                      <span className="truncate text-white font-medium">{lead.name || '—'}</span>
+                      {isTestLead(lead) && <TestBadge />}
+                    </div>
+                    <div className="px-2 py-3 min-w-0"><span className="block truncate text-slate-400">{lead.email}</span></div>
+                    <div className="px-2 py-3"><TierPill tier={lead.tier} /></div>
+                    <div className="px-2 py-3 tabular text-white text-[12.5px]">{lead.pct ? `${lead.pct}%` : '—'}</div>
+                    <div className="px-2 py-3"><SourcePill edition={lead.edition} /></div>
+                    <div className="px-2 py-3 min-w-0"><span className="block truncate text-slate-300">{lead.company || '—'}</span></div>
+                    <div className="px-2 py-3 min-w-0"><span className="block truncate text-slate-400">{lead.industry || '—'}</span></div>
+                  </div>
+                  {/* PDF button — outside the data grid, pinned right */}
+                  <div className="w-[76px] flex-shrink-0 flex justify-end">
+                    <PdfButton url={lead.pdfUrl} />
+                  </div>
+                </div>
+              ))
+            )}
           </div>
-        </div>
+        )}
+
+        {/* ── BOARD (kanban) view ────────────────────────────────────────── */}
+        {layout === 'board' && (
+          <div className="flex gap-4 overflow-x-auto pb-4">
+            {BOARD_COLUMNS.map(col => {
+              const cards = filtered
+                .filter(l => col.match(l.tier))
+                .sort((a, b) => (Number(b.pct) || 0) - (Number(a.pct) || 0));
+              return (
+                <div key={col.key} className="flex-shrink-0 w-[300px]">
+                  <div className="flex items-center justify-between mb-3 px-1">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block w-2 h-2 rounded-full" style={{ background: col.color, boxShadow: `0 0 8px ${col.color}` }} />
+                      <span className="text-[13px] font-semibold text-white">{col.label}</span>
+                    </div>
+                    <span className="text-[12px] text-slate-500 tabular">{cards.length}</span>
+                  </div>
+                  <div className="space-y-2.5">
+                    {cards.length === 0 && (
+                      <div className="text-[12px] text-slate-600 px-3 py-6 text-center rounded-xl" style={{ border: '1px dashed rgba(255,255,255,0.08)' }}>
+                        No leads
+                      </div>
+                    )}
+                    {cards.map(lead => (
+                      <div
+                        key={lead.id}
+                        onClick={() => setSelected(lead)}
+                        className="rounded-xl p-3.5 cursor-pointer transition-colors hover:bg-white/[0.04]"
+                        style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)' }}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="truncate text-[13.5px] font-medium text-white">{lead.name || '—'}</span>
+                              {isTestLead(lead) && <TestBadge />}
+                            </div>
+                            <div className="text-[12px] text-slate-400 truncate mt-0.5">{lead.email}</div>
+                          </div>
+                          {lead.pct && <span className="text-[13px] tabular text-white flex-shrink-0">{lead.pct}%</span>}
+                        </div>
+                        {lead.company && <div className="text-[12px] text-slate-400 truncate mt-2">{lead.company}</div>}
+                        <div className="flex items-center justify-between gap-2 mt-3">
+                          <SourcePill edition={lead.edition} />
+                          <PdfButton url={lead.pdfUrl} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         <p className="text-[11.5px] text-slate-500 text-center mt-6 leading-relaxed">
-          Click any row to see the lead's full profile, source, and every assessment answer. Data is pulled live each refresh. Leads that predate answer-capture show a blank tier / source until they retake the assessment on the current build.
+          Click any {layout === 'board' ? 'card' : 'row'} to see the lead's full profile, source, and every assessment answer. Data is pulled live each refresh. Leads that predate answer-capture show a blank tier / source until they retake the assessment.
         </p>
       </div>
     </div>
   );
 };
-
-const ThSort: React.FC<{ label: string; onClick: () => void; active: boolean; dir: 'asc' | 'desc' }> = ({ label, onClick, active, dir }) => (
-  <th className="px-4 py-3">
-    <button
-      onClick={onClick}
-      className={`inline-flex items-center gap-1 ${active ? 'text-indigo-300' : 'text-slate-500 hover:text-slate-300'} transition-colors`}
-    >
-      <span>{label}</span>
-      <span className={`text-[9px] ${active ? 'opacity-100' : 'opacity-40'}`} aria-hidden="true">
-        {active ? (dir === 'asc' ? '▲' : '▼') : '↕'}
-      </span>
-    </button>
-  </th>
-);
 
 // ─── Main export ─────────────────────────────────────────────────────────────
 export const LeadsPage: React.FC = () => {
