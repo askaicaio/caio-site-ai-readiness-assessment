@@ -27,8 +27,12 @@ const isReviewPath = (): boolean =>
   typeof window !== 'undefined' && window.location.pathname.startsWith('/review');
 const isSalesGuidePath = (): boolean =>
   typeof window !== 'undefined' && window.location.pathname.startsWith('/sales-guide');
-const isLeadsPath = (): boolean =>
+const isSuLeadsPath = (): boolean =>
   typeof window !== 'undefined' && window.location.pathname.startsWith('/scaling-up-leads');
+// CAIO all-leads portal. Guard against /scaling-up-leads also matching /leads-*
+// by checking the SU path first in the branch order below.
+const isCaioLeadsPath = (): boolean =>
+  typeof window !== 'undefined' && window.location.pathname.startsWith('/leads');
 
 // Top-level App branches by path BEFORE any quiz-state hooks run so we
 // don't violate the rules of hooks when an internal-doc path is active.
@@ -49,11 +53,13 @@ const App: React.FC = () => {
       </div>
     );
   }
-  if (isLeadsPath()) {
-    // Password-gated Scaling Up team portal. No Analytics on this route —
-    // team activity shouldn't inflate the public quiz's traffic numbers.
-    return <LeadsPage />;
-  }
+  // Password-gated team portals. No Analytics on these routes — internal
+  // team activity shouldn't inflate the public quiz's traffic numbers.
+  // Scaling Up (scaling-up scope) sees only its own leads; CAIO (all scope)
+  // sees everything. /scaling-up-leads is checked first so it doesn't fall
+  // through to the /leads prefix match.
+  if (isSuLeadsPath()) return <LeadsPage scope="scaling-up" />;
+  if (isCaioLeadsPath()) return <LeadsPage scope="all" />;
   return <Quiz />;
 };
 

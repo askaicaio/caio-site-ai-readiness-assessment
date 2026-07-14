@@ -321,10 +321,11 @@ const LeadModal: React.FC<{ lead: Lead; onClose: () => void }> = ({ lead, onClos
 };
 
 // ─── Login screen ────────────────────────────────────────────────────────────
-const LoginScreen: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) => {
+const LoginScreen: React.FC<{ scope: LeadsScope; onSuccess: () => void }> = ({ scope, onSuccess }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const isAll = scope === 'all';
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -336,7 +337,7 @@ const LoginScreen: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ password, scope }),
       });
       if (res.ok) {
         onSuccess();
@@ -360,10 +361,12 @@ const LoginScreen: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) => {
             alt="ChiefAIOfficer.com in partnership with Scaling Up"
             className="mx-auto mb-8 h-9 sm:h-10 w-auto opacity-90"
           />
-          <span className="kicker text-slate-500">Scaling Up · Restricted</span>
+          <span className="kicker text-slate-500">{isAll ? 'ChiefAIOfficer · Restricted' : 'Scaling Up · Restricted'}</span>
           <h1 className="display-2 mt-3">Leads Portal</h1>
           <p className="lead mt-3 text-[14.5px]">
-            Enter the team password to view and export your Scaling Up assessment leads.
+            {isAll
+              ? 'Enter the team password to view and export all assessment leads.'
+              : 'Enter the team password to view and export your Scaling Up assessment leads.'}
           </p>
         </div>
         <SubtleCard>
@@ -479,6 +482,10 @@ const ROW_GRID: React.CSSProperties = {
     '96px minmax(110px,1.4fr) minmax(150px,1.7fr) 84px 60px 104px minmax(100px,1.2fr) minmax(90px,1fr)',
   alignItems: 'center',
 };
+// Fixed row heights so the PDF button gutter (rendered OUTSIDE the table box)
+// lines up exactly with each data row.
+const HEADER_H = 46;
+const ROW_H = 52;
 
 // Board (kanban) columns — one per tier, plus an "Unscored" bucket for leads
 // that predate tier capture.
@@ -500,7 +507,8 @@ const HeaderBtn: React.FC<{ label: string; active: boolean; dir: 'asc' | 'desc';
   </button>
 );
 
-const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
+const LeadsTable: React.FC<{ scope: LeadsScope; onLogout: () => void }> = ({ scope, onLogout }) => {
+  const isAll = scope === 'all';
   const [leads, setLeads]     = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState('');
@@ -508,7 +516,10 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const [filter, setFilter]   = useState('');
   const [tierFilter, setTierFilter] = useState<'' | 'Explorer' | 'Adopter' | 'Leader'>('');
   // Default to "All editions" so pre-tracking leads (blank edition) still show.
+  // The source filter is only shown in the CAIO ('all') portal — the Scaling Up
+  // portal is already server-scoped to scaling-up.
   const [editionFilter, setEditionFilter] = useState<'' | 'scaling-up' | 'caio'>('');
+  const [hideTests, setHideTests] = useState(false); // off by default → tests shown
   const [layout, setLayout] = useState<'table' | 'board'>('table');
   const [viewMode, setViewMode] = useState<ViewMode>('recent');
   const [sortKey, setSortKey] = useState<SortKey>('subscribedAt');
@@ -542,6 +553,7 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
     const pctNum = (l: Lead) => Number(l.pct) || 0;
     return leads
       .filter(l => {
+        if (hideTests && isTestLead(l)) return false;
         if (tierFilter && l.tier !== tierFilter) return false;
         // Strict edition match only when a specific edition is selected.
         if (editionFilter && l.edition !== editionFilter) return false;
@@ -570,7 +582,7 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
         if (av === bv) return 0;
         return sortDir === 'asc' ? (av < bv ? -1 : 1) : (av < bv ? 1 : -1);
       });
-  }, [leads, filter, tierFilter, editionFilter, viewMode, sortKey, sortDir]);
+  }, [leads, filter, tierFilter, editionFilter, hideTests, viewMode, sortKey, sortDir]);
 
   const toggleSort = (k: SortKey) => {
     setViewMode('custom');
@@ -580,7 +592,7 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
 
   const handleExport = () => {
     const stamp = new Date().toISOString().slice(0, 10);
-    downloadCsv(leadsToCsv(filtered), `scaling-up-leads-${stamp}.csv`);
+    downloadCsv(leadsToCsv(filtered), `${isAll ? 'caio' : 'scaling-up'}-leads-${stamp}.csv`);
   };
 
   const handleLogout = async () => {
@@ -600,7 +612,7 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
           <div>
-            <span className="kicker text-slate-500">Scaling Up · Team Portal</span>
+            <span className="kicker text-slate-500">{isAll ? 'ChiefAIOfficer · All Leads' : 'Scaling Up · Team Portal'}</span>
             <h1 className="display-2 mt-2.5">Assessment leads</h1>
             <p className="text-[13.5px] text-slate-400 mt-2 leading-relaxed">
               {loading
@@ -639,13 +651,13 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
 
         {/* Filters + view mode */}
         <SubtleCard className="!p-4 sm:!p-5 mb-5">
-          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto_auto] gap-3 items-center">
+          <div className="flex flex-wrap gap-3 items-center">
             <input
               type="search"
               value={filter}
               onChange={e => setFilter(e.target.value)}
               placeholder="Search name, email, company, role, industry…"
-              className="input-premium block w-full"
+              className="input-premium block flex-1 min-w-[220px]"
             />
             {layout === 'table' && (
               <Select
@@ -656,16 +668,20 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
                 options={VIEW_MODES.map(v => ({ value: v.key, label: v.label }))}
               />
             )}
-            <Select
-              ariaLabel="Filter by source"
-              value={editionFilter}
-              onChange={v => setEditionFilter(v as typeof editionFilter)}
-              options={[
-                { value: '', label: 'All sources' },
-                { value: 'scaling-up', label: 'Scaling Up only' },
-                { value: 'caio', label: 'CAIO only' },
-              ]}
-            />
+            {/* Source filter only in the CAIO ('all') portal — the Scaling Up
+                portal is already scoped to scaling-up server-side. */}
+            {isAll && (
+              <Select
+                ariaLabel="Filter by source"
+                value={editionFilter}
+                onChange={v => setEditionFilter(v as typeof editionFilter)}
+                options={[
+                  { value: '', label: 'All sources' },
+                  { value: 'scaling-up', label: 'Scaling Up only' },
+                  { value: 'caio', label: 'CAIO only' },
+                ]}
+              />
+            )}
             <Select
               ariaLabel="Filter by tier"
               minWidth={130}
@@ -678,9 +694,32 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
                 { value: 'Explorer', label: 'Explorer' },
               ]}
             />
-            {(filter || tierFilter || editionFilter || viewMode !== 'recent') && (
+            {/* Hide test entries — off by default (tests visible). */}
+            <button
+              type="button"
+              role="checkbox"
+              aria-checked={hideTests}
+              onClick={() => setHideTests(h => !h)}
+              className="inline-flex items-center gap-2 px-3 py-2.5 rounded-lg text-[13px] transition-colors hover:bg-white/[0.03]"
+              style={{ border: '1px solid rgba(255,255,255,0.08)' }}
+            >
+              <span
+                className="inline-flex items-center justify-center w-4 h-4 rounded-[5px] border transition-all flex-shrink-0"
+                style={hideTests
+                  ? { background: 'rgba(99,102,241,0.5)', borderColor: '#818cf8' }
+                  : { borderColor: 'rgba(255,255,255,0.25)' }}
+              >
+                {hideTests && (
+                  <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </span>
+              <span className={hideTests ? 'text-slate-200' : 'text-slate-400'}>Hide test entries</span>
+            </button>
+            {(filter || tierFilter || editionFilter || hideTests || viewMode !== 'recent') && (
               <button
-                onClick={() => { setFilter(''); setTierFilter(''); setEditionFilter(''); setViewMode('recent'); }}
+                onClick={() => { setFilter(''); setTierFilter(''); setEditionFilter(''); setHideTests(false); setViewMode('recent'); }}
                 className="btn-ghost text-[13px]"
               >
                 Reset
@@ -696,57 +735,69 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
         )}
 
         {/* ── TABLE view ─────────────────────────────────────────────────── */}
+        {/* The data lives in a bordered box on the LEFT. The PDF buttons live in
+            a separate gutter on the RIGHT — genuinely OUTSIDE the table box —
+            with matched fixed row heights so each button lines up with its row. */}
         {layout === 'table' && (
-          <div className="rounded-2xl" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)' }}>
-            {/* Header — data columns align via ROW_GRID; the PDF column sits
-                OUTSIDE the data grid (fixed 76px) so it's always at the right. */}
-            <div className="flex items-center gap-3 px-3 sm:px-4 pt-3.5 pb-2.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-              <div className="flex-1" style={ROW_GRID}>
-                <HeaderBtn label="Date"    active={custom && sortKey === 'subscribedAt'} dir={sortDir} onClick={() => toggleSort('subscribedAt')} />
-                <HeaderBtn label="Name"    active={custom && sortKey === 'name'}         dir={sortDir} onClick={() => toggleSort('name')} />
-                <div className={HEAD_CLS}>Email</div>
-                <HeaderBtn label="Tier"    active={custom && sortKey === 'tier'}         dir={sortDir} onClick={() => toggleSort('tier')} />
-                <HeaderBtn label="Score"   active={custom && sortKey === 'pct'}          dir={sortDir} onClick={() => toggleSort('pct')} />
-                <div className={HEAD_CLS}>Source</div>
-                <HeaderBtn label="Company" active={custom && sortKey === 'company'}      dir={sortDir} onClick={() => toggleSort('company')} />
-                <div className={HEAD_CLS}>Industry</div>
+          <div className="flex items-start gap-3">
+            {/* LEFT: the table box (data only) */}
+            <div className="flex-1 min-w-0 rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)' }}>
+              {/* Header */}
+              <div className="px-3 sm:px-4 flex items-center" style={{ height: HEADER_H, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                <div className="flex-1" style={ROW_GRID}>
+                  <HeaderBtn label="Date"    active={custom && sortKey === 'subscribedAt'} dir={sortDir} onClick={() => toggleSort('subscribedAt')} />
+                  <HeaderBtn label="Name"    active={custom && sortKey === 'name'}         dir={sortDir} onClick={() => toggleSort('name')} />
+                  <div className={HEAD_CLS}>Email</div>
+                  <HeaderBtn label="Tier"    active={custom && sortKey === 'tier'}         dir={sortDir} onClick={() => toggleSort('tier')} />
+                  <HeaderBtn label="Score"   active={custom && sortKey === 'pct'}          dir={sortDir} onClick={() => toggleSort('pct')} />
+                  <div className={HEAD_CLS}>Source</div>
+                  <HeaderBtn label="Company" active={custom && sortKey === 'company'}      dir={sortDir} onClick={() => toggleSort('company')} />
+                  <div className={HEAD_CLS}>Industry</div>
+                </div>
               </div>
-              <div className="w-[76px] flex-shrink-0" />
+
+              {(!loading && filtered.length === 0) ? (
+                <div className="px-4 py-12 text-center text-slate-500 text-[13px]">
+                  {leads.length === 0 ? 'No leads yet.' : 'No leads match those filters.'}
+                </div>
+              ) : (
+                filtered.map(lead => (
+                  <div
+                    key={lead.id}
+                    onClick={() => setSelected(lead)}
+                    className="px-3 sm:px-4 flex items-center cursor-pointer transition-colors hover:bg-white/[0.03] text-[13px]"
+                    style={{ height: ROW_H, borderBottom: '1px solid rgba(255,255,255,0.04)' }}
+                  >
+                    <div className="flex-1" style={ROW_GRID}>
+                      <div className="px-2 text-slate-400 tabular whitespace-nowrap text-[12.5px]">
+                        {lead.subscribedAt ? new Date(lead.subscribedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' }) : '—'}
+                      </div>
+                      <div className="px-2 min-w-0 flex items-center gap-2">
+                        <span className="truncate text-white font-medium">{lead.name || '—'}</span>
+                        {isTestLead(lead) && <TestBadge />}
+                      </div>
+                      <div className="px-2 min-w-0"><span className="block truncate text-slate-400">{lead.email}</span></div>
+                      <div className="px-2"><TierPill tier={lead.tier} /></div>
+                      <div className="px-2 tabular text-white text-[12.5px]">{lead.pct ? `${lead.pct}%` : '—'}</div>
+                      <div className="px-2"><SourcePill edition={lead.edition} /></div>
+                      <div className="px-2 min-w-0"><span className="block truncate text-slate-300">{lead.company || '—'}</span></div>
+                      <div className="px-2 min-w-0"><span className="block truncate text-slate-400">{lead.industry || '—'}</span></div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
 
-            {(!loading && filtered.length === 0) ? (
-              <div className="px-4 py-12 text-center text-slate-500 text-[13px]">
-                {leads.length === 0 ? 'No leads yet.' : 'No leads match those filters.'}
-              </div>
-            ) : (
-              filtered.map(lead => (
-                <div key={lead.id} className="flex items-center gap-3 px-3 sm:px-4 py-1" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                  {/* Clickable data area (opens the modal) */}
-                  <div
-                    onClick={() => setSelected(lead)}
-                    className="flex-1 rounded-lg cursor-pointer transition-colors hover:bg-white/[0.03] text-[13px]"
-                    style={ROW_GRID}
-                  >
-                    <div className="px-2 py-3 text-slate-400 tabular whitespace-nowrap text-[12.5px]">
-                      {lead.subscribedAt ? new Date(lead.subscribedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' }) : '—'}
-                    </div>
-                    <div className="px-2 py-3 min-w-0 flex items-center gap-2">
-                      <span className="truncate text-white font-medium">{lead.name || '—'}</span>
-                      {isTestLead(lead) && <TestBadge />}
-                    </div>
-                    <div className="px-2 py-3 min-w-0"><span className="block truncate text-slate-400">{lead.email}</span></div>
-                    <div className="px-2 py-3"><TierPill tier={lead.tier} /></div>
-                    <div className="px-2 py-3 tabular text-white text-[12.5px]">{lead.pct ? `${lead.pct}%` : '—'}</div>
-                    <div className="px-2 py-3"><SourcePill edition={lead.edition} /></div>
-                    <div className="px-2 py-3 min-w-0"><span className="block truncate text-slate-300">{lead.company || '—'}</span></div>
-                    <div className="px-2 py-3 min-w-0"><span className="block truncate text-slate-400">{lead.industry || '—'}</span></div>
-                  </div>
-                  {/* PDF button — outside the data grid, pinned right */}
-                  <div className="w-[76px] flex-shrink-0 flex justify-end">
+            {/* RIGHT: PDF button gutter, OUTSIDE the table box */}
+            {!(!loading && filtered.length === 0) && (
+              <div className="flex-shrink-0">
+                <div style={{ height: HEADER_H }} />
+                {filtered.map(lead => (
+                  <div key={lead.id} className="flex items-center" style={{ height: ROW_H }}>
                     <PdfButton url={lead.pdfUrl} />
                   </div>
-                </div>
-              ))
+                ))}
+              </div>
             )}
           </div>
         )}
@@ -813,26 +864,33 @@ const LeadsTable: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
 };
 
 // ─── Main export ─────────────────────────────────────────────────────────────
-export const LeadsPage: React.FC = () => {
+export type LeadsScope = 'scaling-up' | 'all';
+
+export const LeadsPage: React.FC<{ scope: LeadsScope }> = ({ scope }) => {
   const [authed, setAuthed] = useState<boolean | null>(null);
 
-  // Probe on mount — the cookie is httpOnly so we can't read it, but a GET
-  // returns 401 quickly if we're not signed in.
+  // Probe on mount. The cookie is httpOnly so we can't read it — but a GET
+  // returns 401 if not signed in, and echoes the authed `scope`. We only treat
+  // the session as valid if that scope matches THIS portal's scope (so a
+  // Scaling Up cookie doesn't silently authorise the CAIO portal, or vice
+  // versa — the user is prompted for the right password instead).
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const res = await fetch('/api/leads', { credentials: 'include' });
-        if (!cancelled) setAuthed(res.ok);
+        if (cancelled) return;
+        if (!res.ok) { setAuthed(false); return; }
+        const data = await res.json().catch(() => ({}));
+        setAuthed(data.scope === scope);
       } catch {
         if (!cancelled) setAuthed(false);
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [scope]);
 
   if (authed === null) {
-    // Loading probe — brief flash.
     return (
       <div className="min-h-screen flex items-center justify-center">
         <span className="text-[12px] text-slate-500 tracking-widest uppercase">Loading…</span>
@@ -840,6 +898,6 @@ export const LeadsPage: React.FC = () => {
     );
   }
 
-  if (!authed) return <LoginScreen onSuccess={() => setAuthed(true)} />;
-  return <LeadsTable onLogout={() => setAuthed(false)} />;
+  if (!authed) return <LoginScreen scope={scope} onSuccess={() => setAuthed(true)} />;
+  return <LeadsTable scope={scope} onLogout={() => setAuthed(false)} />;
 };

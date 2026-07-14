@@ -31,21 +31,32 @@ import { list } from '@vercel/blob';
 
 export const config = { maxDuration: 30 };
 
-const DEFAULT_PASSWORD = 'scalingup2026';
-const COOKIE_NAME = 'su_leads_auth';
+// Two portals share this endpoint, scoped by which password was used:
+//   'scaling-up' → Scaling Up team. Sees ONLY edition === 'scaling-up' leads.
+//   'all'        → CAIO team. Sees every lead.
+// The scope is derived from the password (never a client-supplied param), so a
+// Scaling Up user can't widen their view by tampering with the request.
+type Scope = 'scaling-up' | 'all';
+
+const SU_DEFAULT_PASSWORD   = 'scalingup2026';
+const CAIO_DEFAULT_PASSWORD = 'caioleads2026';
+const COOKIE_NAME = 'leads_auth';
 const COOKIE_MAX_AGE = 60 * 60 * 8; // 8 hours
 
 // ─── Auth helpers ────────────────────────────────────────────────────────────
-function getPassword(): string {
-  return (process.env.SCALING_UP_LEADS_PASSWORD?.trim()) || DEFAULT_PASSWORD;
+function passwordForScope(scope: Scope): string {
+  return scope === 'all'
+    ? (process.env.CAIO_LEADS_PASSWORD?.trim()) || CAIO_DEFAULT_PASSWORD
+    : (process.env.SCALING_UP_LEADS_PASSWORD?.trim()) || SU_DEFAULT_PASSWORD;
 }
-function getSecret(): string {
-  // Reuse the password as the HMAC secret if a dedicated secret isn't set —
-  // this makes the setup work with zero required env vars.
-  return (process.env.SCALING_UP_LEADS_SECRET?.trim()) || getPassword();
+function secretForScope(scope: Scope): string {
+  // Reuse the scope's password as the HMAC secret if no dedicated secret is set,
+  // so the setup works with zero required env vars. Distinct passwords per scope
+  // mean distinct tokens automatically.
+  return (process.env.LEADS_SECRET?.trim()) || `${passwordForScope(scope)}::${scope}`;
 }
-function makeSessionToken(): string {
-  return createHmac('sha256', getSecret()).update('scaling-up-leads-authed').digest('hex');
+function makeSessionToken(scope: Scope): string {
+  return createHmac('sha256', secretForScope(scope)).update(`leads-authed:${scope}`).digest('hex');
 }
 function timingSafeStringEqual(a: string, b: string): boolean {
   const ab = Buffer.from(a, 'utf8');
@@ -63,11 +74,13 @@ function parseCookies(header: string | undefined): Record<string, string> {
   }
   return out;
 }
-function isAuthed(req: VercelRequest): boolean {
-  const cookies = parseCookies(req.headers.cookie);
-  const token = cookies[COOKIE_NAME];
-  if (!token) return false;
-  return timingSafeStringEqual(token, makeSessionToken());
+// Returns the authed scope from the cookie, or null if not signed in.
+function authedScope(req: VercelRequest): Scope | null {
+  const token = parseCookies(req.headers.cookie)[COOKIE_NAME];
+  if (!token) return null;
+  if (timingSafeStringEqual(token, makeSessionToken('all'))) return 'all';
+  if (timingSafeStringEqual(token, makeSessionToken('scaling-up'))) return 'scaling-up';
+  return null;
 }
 
 // ─── MailerLite fetch ────────────────────────────────────────────────────────
@@ -245,18 +258,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
 
   if (req.method === 'POST') {
-    // Auth attempt.
-    const body = (req.body || {}) as { password?: string };
+    // Auth attempt. Scope comes from the portal (which URL the user is on);
+    // the password is validated against THAT scope's password.
+    const body = (req.body || {}) as { password?: string; scope?: string };
     const password = (body.password || '').trim();
+    const scope: Scope = body.scope === 'all' ? 'all' : 'scaling-up';
     if (!password) return res.status(400).json({ error: 'Password required.' });
-    if (!timingSafeStringEqual(password, getPassword())) {
+    if (!timingSafeStringEqual(password, passwordForScope(scope))) {
       return res.status(401).json({ error: 'Wrong password.' });
     }
-    const token = makeSessionToken();
+    const token = makeSessionToken(scope);
     res.setHeader('Set-Cookie',
       `${COOKIE_NAME}=${token}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=${COOKIE_MAX_AGE}`,
     );
-    return res.status(200).json({ ok: true });
+    return res.status(200).json({ ok: true, scope });
   }
 
   if (req.method === 'DELETE') {
@@ -269,8 +284,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed.' });
 
-  // GET requires the session cookie.
-  if (!isAuthed(req)) return res.status(401).json({ error: 'Not signed in.' });
+  // GET requires the session cookie; the scope determines what's visible.
+  const scope = authedScope(req);
+  if (!scope) return res.status(401).json({ error: 'Not signed in.' });
 
   const apiKey = process.env.MAILERLITE_API_KEY;
   if (!apiKey) {
@@ -321,8 +337,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!seen.has(key)) leads.push(recordToLead(rec));
     }
 
-    leads.sort((a, b) => (a.subscribedAt < b.subscribedAt ? 1 : -1));
-    return res.status(200).json({ leads, count: leads.length, fetchedAt: new Date().toISOString() });
+    // Scope isolation: the Scaling Up portal only ever receives scaling-up
+    // leads — CAIO / unknown-edition leads never leave the server for that
+    // scope. The CAIO ('all') portal receives everything.
+    const scoped = scope === 'scaling-up'
+      ? leads.filter(l => l.edition === 'scaling-up')
+      : leads;
+
+    scoped.sort((a, b) => (a.subscribedAt < b.subscribedAt ? 1 : -1));
+    return res.status(200).json({ leads: scoped, count: scoped.length, scope, fetchedAt: new Date().toISOString() });
   } catch (err) {
     console.error('[leads] fetch error:', err);
     return res.status(502).json({ error: `Failed to fetch subscribers from MailerLite: ${err instanceof Error ? err.message : String(err)}` });
