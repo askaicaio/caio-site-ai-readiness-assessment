@@ -24,6 +24,9 @@ interface Lead {
   biggestChallenge?: string;
   aiTools?: string;
   answers?: QA[];
+  bookedCall?: boolean;
+  bookedAt?: string;
+  bookedCalendar?: string;
 }
 
 // Human labels for the source/edition. edition maps 1:1 to which link the
@@ -181,6 +184,26 @@ const TestBadge: React.FC = () => (
   </span>
 );
 
+// "Booked a call" badge — set from the GHL booking webhook (see api/booking.ts).
+// Emerald + a small check so it reads as a positive, hot signal at a glance.
+const BookedBadge: React.FC<{ lead: Pick<Lead, 'bookedCalendar' | 'bookedAt'> }> = ({ lead }) => {
+  const when = lead.bookedAt ? new Date(lead.bookedAt) : null;
+  const whenLabel = when && !isNaN(when.getTime()) ? when.toLocaleDateString(undefined, { month: 'short', day: '2-digit' }) : '';
+  const title = ['Booked a call', lead.bookedCalendar, whenLabel && `on ${whenLabel}`].filter(Boolean).join(' · ');
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-[0.12em] border flex-shrink-0"
+      style={{ color: '#6ee7b7', background: 'rgba(16,185,129,0.14)', borderColor: 'rgba(16,185,129,0.4)' }}
+      title={title}
+    >
+      <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+      </svg>
+      Booked
+    </span>
+  );
+};
+
 // Report action — used both in the table (right of each row) and on board cards.
 const PdfButton: React.FC<{ url?: string; onClickCapture?: () => void }> = ({ url }) => {
   if (!url) return <span className="text-slate-600 text-[13px]">—</span>;
@@ -271,6 +294,7 @@ const LeadModal: React.FC<{ lead: Lead; onClose: () => void }> = ({ lead, onClos
             <div className="flex items-center gap-2.5 flex-wrap mb-2">
               <TierPill tier={lead.tier} />
               <SourcePill edition={lead.edition} />
+              {lead.bookedCall && <BookedBadge lead={lead} />}
               {isTestLead(lead) && <TestBadge />}
               {lead.pct && <span className="text-[13px] text-slate-400 tabular">{lead.pct}% readiness</span>}
             </div>
@@ -292,6 +316,14 @@ const LeadModal: React.FC<{ lead: Lead; onClose: () => void }> = ({ lead, onClos
               {lead.subscribedAt ? new Date(lead.subscribedAt).toLocaleString() : ''}
             </Field>
             <Field label="Source / Link">{source}</Field>
+            <Field label="Booked call">
+              {lead.bookedCall ? (
+                <span className="text-emerald-300">
+                  Yes{lead.bookedCalendar ? ` · ${lead.bookedCalendar}` : ''}
+                  {lead.bookedAt && !isNaN(new Date(lead.bookedAt).getTime()) ? ` · ${new Date(lead.bookedAt).toLocaleString()}` : ''}
+                </span>
+              ) : ''}
+            </Field>
           </div>
 
           {/* Attribution — only when we have it */}
@@ -451,6 +483,9 @@ const CSV_COLUMNS: Array<{ label: string; get: (l: Lead) => string }> = [
   { label: 'Tier',                get: l => l.tier },
   { label: 'Score %',             get: l => l.pct },
   { label: 'Source',              get: l => editionLabel(l.edition) },
+  { label: 'Booked Call',         get: l => (l.bookedCall ? 'Yes' : '') },
+  { label: 'Booked Calendar',     get: l => l.bookedCalendar || '' },
+  { label: 'Booked At',           get: l => l.bookedAt || '' },
   { label: 'Company',             get: l => l.company },
   { label: 'Role',                get: l => l.role },
   { label: 'Industry',            get: l => l.industry },
@@ -552,6 +587,7 @@ const LeadsTable: React.FC<{ scope: LeadsScope; onLogout: () => void }> = ({ sco
   // portal is already server-scoped to scaling-up.
   const [editionFilter, setEditionFilter] = useState<'' | 'scaling-up' | 'caio'>('');
   const [hideTests, setHideTests] = useState(false); // off by default → tests shown
+  const [bookedOnly, setBookedOnly] = useState(false); // off by default → all leads shown
   const [layout, setLayout] = useState<'table' | 'board'>('table');
   const [viewMode, setViewMode] = useState<ViewMode>('recent');
   const [sortKey, setSortKey] = useState<SortKey>('subscribedAt');
@@ -586,6 +622,7 @@ const LeadsTable: React.FC<{ scope: LeadsScope; onLogout: () => void }> = ({ sco
     return leads
       .filter(l => {
         if (hideTests && isTestLead(l)) return false;
+        if (bookedOnly && !l.bookedCall) return false;
         if (tierFilter && l.tier !== tierFilter) return false;
         // Strict edition match only when a specific edition is selected.
         if (editionFilter && l.edition !== editionFilter) return false;
@@ -614,7 +651,7 @@ const LeadsTable: React.FC<{ scope: LeadsScope; onLogout: () => void }> = ({ sco
         if (av === bv) return 0;
         return sortDir === 'asc' ? (av < bv ? -1 : 1) : (av < bv ? 1 : -1);
       });
-  }, [leads, filter, tierFilter, editionFilter, hideTests, viewMode, sortKey, sortDir]);
+  }, [leads, filter, tierFilter, editionFilter, hideTests, bookedOnly, viewMode, sortKey, sortDir]);
 
   const toggleSort = (k: SortKey) => {
     setViewMode('custom');
@@ -749,9 +786,32 @@ const LeadsTable: React.FC<{ scope: LeadsScope; onLogout: () => void }> = ({ sco
               </span>
               <span className={hideTests ? 'text-slate-200' : 'text-slate-400'}>Hide test entries</span>
             </button>
-            {(filter || tierFilter || editionFilter || hideTests || viewMode !== 'recent') && (
+            {/* Booked only — surface leads who booked a call (Dani / exec briefing). */}
+            <button
+              type="button"
+              role="checkbox"
+              aria-checked={bookedOnly}
+              onClick={() => setBookedOnly(b => !b)}
+              className="inline-flex items-center gap-2 px-3 py-2.5 rounded-lg text-[13px] transition-colors hover:bg-white/[0.03]"
+              style={{ border: '1px solid rgba(255,255,255,0.08)' }}
+            >
+              <span
+                className="inline-flex items-center justify-center w-4 h-4 rounded-[5px] border transition-all flex-shrink-0"
+                style={bookedOnly
+                  ? { background: 'rgba(16,185,129,0.55)', borderColor: '#34d399' }
+                  : { borderColor: 'rgba(255,255,255,0.25)' }}
+              >
+                {bookedOnly && (
+                  <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </span>
+              <span className={bookedOnly ? 'text-emerald-200' : 'text-slate-400'}>Booked a call</span>
+            </button>
+            {(filter || tierFilter || editionFilter || hideTests || bookedOnly || viewMode !== 'recent') && (
               <button
-                onClick={() => { setFilter(''); setTierFilter(''); setEditionFilter(''); setHideTests(false); setViewMode('recent'); }}
+                onClick={() => { setFilter(''); setTierFilter(''); setEditionFilter(''); setHideTests(false); setBookedOnly(false); setViewMode('recent'); }}
                 className="btn-ghost text-[13px]"
               >
                 Reset
@@ -807,6 +867,7 @@ const LeadsTable: React.FC<{ scope: LeadsScope; onLogout: () => void }> = ({ sco
                     </div>
                     <div className="lead-cell px-2 min-w-0 flex items-center gap-2">
                       <span className="truncate text-white font-medium">{lead.name || '—'}</span>
+                      {lead.bookedCall && <BookedBadge lead={lead} />}
                       {isTestLead(lead) && <TestBadge />}
                       <CopyBtn value={lead.name} />
                     </div>
@@ -871,6 +932,7 @@ const LeadsTable: React.FC<{ scope: LeadsScope; onLogout: () => void }> = ({ sco
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5">
                               <span className="truncate text-[13.5px] font-medium text-white">{lead.name || '—'}</span>
+                              {lead.bookedCall && <BookedBadge lead={lead} />}
                               {isTestLead(lead) && <TestBadge />}
                             </div>
                             <div className="text-[12px] text-slate-400 truncate mt-0.5">{lead.email}</div>

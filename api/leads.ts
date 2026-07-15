@@ -144,6 +144,11 @@ interface Lead {
   biggestChallenge: string;
   aiTools: string;
   answers: QA[];
+  // Enriched from the Blob booking sidecar (bookings/) — set when this lead has
+  // booked a call on a tracked GHL calendar (Dani's 1:1, CAIO exec briefing…).
+  bookedCall: boolean;
+  bookedAt: string;
+  bookedCalendar: string;
 }
 
 function toLead(s: MlSubscriber): Lead {
@@ -172,6 +177,7 @@ function toLead(s: MlSubscriber): Lead {
     utmSource: '', utmCampaign: '', referer: '',
     primaryGoal: '', biggestChallenge: '', aiTools: '',
     answers: [],
+    bookedCall: false, bookedAt: '', bookedCalendar: '',
   };
 }
 
@@ -239,7 +245,55 @@ function recordToLead(rec: LeadRecord): Lead {
     biggestChallenge: rec.biggestChallenge || '',
     aiTools: rec.aiTools || '',
     answers: Array.isArray(rec.answers) ? rec.answers : [],
+    bookedCall: false, bookedAt: '', bookedCalendar: '',
   };
+}
+
+// ─── Blob booking sidecars ───────────────────────────────────────────────────
+// api/booking.ts writes one record per booking event under bookings/. We keep
+// the LATEST event per email (so a cancel after a book wins) and expose a small
+// { booked, bookedAt, calendar } we can stamp onto each lead.
+interface BookingRecord {
+  email?: string;
+  bookedAt?: string;
+  calendar?: string;
+  status?: string;
+  booked?: boolean;
+  receivedAt?: string;
+}
+interface BookingState { booked: boolean; bookedAt: string; calendar: string }
+
+async function fetchBookings(): Promise<Map<string, BookingState>> {
+  const latest = new Map<string, BookingRecord>();
+  try {
+    const { blobs } = await list({ prefix: 'bookings/', limit: 1000 });
+    const records = await Promise.all(blobs.map(async b => {
+      try {
+        const res = await fetch(b.url, { cache: 'no-store' });
+        if (!res.ok) return null;
+        return (await res.json()) as BookingRecord;
+      } catch { return null; }
+    }));
+    for (const rec of records) {
+      const email = rec?.email?.trim().toLowerCase();
+      if (!email) continue;
+      const existing = latest.get(email);
+      if (!existing || (rec!.receivedAt || '') > (existing.receivedAt || '')) {
+        latest.set(email, rec!);
+      }
+    }
+  } catch (err) {
+    console.error('[leads] bookings list error:', err);
+  }
+  const out = new Map<string, BookingState>();
+  for (const [email, rec] of latest) {
+    out.set(email, {
+      booked: rec.booked !== false, // default true unless explicitly cancelled
+      bookedAt: rec.bookedAt || rec.receivedAt || '',
+      calendar: rec.calendar || '',
+    });
+  }
+  return out;
 }
 
 async function fetchAllSubscribers(apiKey: string): Promise<Lead[]> {
@@ -327,9 +381,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // any lead that made it to Blob but not MailerLite (rare — e.g. an ML write
     // that failed). Blob enrichment is best-effort: if it throws, we still
     // return the MailerLite rows.
-    const [mlLeads, records] = await Promise.all([
+    const [mlLeads, records, bookings] = await Promise.all([
       fetchAllSubscribers(apiKey),
       fetchLeadRecords(),
+      fetchBookings(),
     ]);
 
     const seen = new Set<string>();
@@ -369,6 +424,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     for (const l of leads) {
       if (!l.edition && KNOWN_SCALING_UP_EMAILS.has(l.email.trim().toLowerCase())) {
         l.edition = 'scaling-up';
+      }
+    }
+
+    // Stamp booking state (who booked a call, on which calendar) from GHL.
+    for (const l of leads) {
+      const b = bookings.get(l.email.trim().toLowerCase());
+      if (b?.booked) {
+        l.bookedCall = true;
+        l.bookedAt = b.bookedAt;
+        l.bookedCalendar = b.calendar;
       }
     }
 
