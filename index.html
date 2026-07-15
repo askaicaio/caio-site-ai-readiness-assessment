@@ -297,6 +297,14 @@
         .card-premium { border-radius: 16px; }
         body::after { background-size: 48px 48px; }
       }
+
+      /* ─── Leads portal hover reveals ──────────────────────────────── */
+      /* Driven by plain CSS so they don't depend on Tailwind named-group
+         JIT support on the CDN build. */
+      .lead-pdf, .lead-copy { opacity: 0; transition: opacity 150ms var(--ease-out); }
+      .lead-row:hover .lead-pdf { opacity: 1; }
+      .lead-cell:hover .lead-copy { opacity: 1; }
+      .lead-copy:focus-visible { opacity: 1; }
     </style>
 </head>
   <body>

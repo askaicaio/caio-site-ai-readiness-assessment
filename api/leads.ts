@@ -43,6 +43,20 @@ const CAIO_DEFAULT_PASSWORD = 'caioleads2026';
 const COOKIE_NAME = 'leads_auth';
 const COOKIE_MAX_AGE = 60 * 60 * 8; // 8 hours
 
+// Known Scaling Up leads captured BEFORE edition tracking existed (so their
+// stored edition is blank). Sourced from the GHL `ai-audit-scaling-up` tag.
+// We treat these as scaling-up so they surface in the Scaling Up portal.
+// Newer submissions carry the edition automatically and don't need listing.
+const KNOWN_SCALING_UP_EMAILS = new Set<string>([
+  'cdc@krexinc.com',
+  'dani@123.com',
+  'dneefe@gmail.com',
+  'djneefe@gmail.com',
+  'joshua@chiefaiofficer.com',
+  'abroome@scalingup.com',
+  'askai@chiefaiofficer.com',
+]);
+
 // ─── Auth helpers ────────────────────────────────────────────────────────────
 function passwordForScope(scope: Scope): string {
   return scope === 'all'
@@ -335,6 +349,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Union in Blob-only leads (not present in MailerLite).
     for (const [key, rec] of records) {
       if (!seen.has(key)) leads.push(recordToLead(rec));
+    }
+
+    // Backfill edition for known pre-tracking Scaling Up leads (GHL tag export).
+    for (const l of leads) {
+      if (!l.edition && KNOWN_SCALING_UP_EMAILS.has(l.email.trim().toLowerCase())) {
+        l.edition = 'scaling-up';
+      }
     }
 
     // Scope isolation: the Scaling Up portal only ever receives scaling-up

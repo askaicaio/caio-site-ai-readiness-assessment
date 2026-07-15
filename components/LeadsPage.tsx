@@ -199,6 +199,38 @@ const PdfButton: React.FC<{ url?: string; onClickCapture?: () => void }> = ({ ur
   );
 };
 
+// Copy-to-clipboard button — revealed on hover of its parent cell (which must
+// carry the `group/cell` class). Stops propagation so it doesn't open the modal.
+const CopyBtn: React.FC<{ value?: string }> = ({ value }) => {
+  const [copied, setCopied] = useState(false);
+  if (!value) return null;
+  const copy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try { void navigator.clipboard?.writeText(value); } catch { /* ignore */ }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1200);
+  };
+  return (
+    <button
+      onClick={copy}
+      title={copied ? 'Copied' : 'Copy'}
+      aria-label="Copy"
+      className="lead-copy flex-shrink-0 text-slate-500 hover:text-white"
+    >
+      {copied ? (
+        <svg className="w-3.5 h-3.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+        </svg>
+      ) : (
+        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+          <rect x="9" y="9" width="11" height="11" rx="2" ry="2" />
+          <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+        </svg>
+      )}
+    </button>
+  );
+};
+
 // ─── Lead detail modal ────────────────────────────────────────────────────────
 const Field: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
   <div>
@@ -497,10 +529,10 @@ const BOARD_COLUMNS: Array<{ key: string; label: string; color: string; match: (
 ];
 
 const HEAD_CLS = 'px-2 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-slate-500';
-const HeaderBtn: React.FC<{ label: string; active: boolean; dir: 'asc' | 'desc'; onClick: () => void }> = ({ label, active, dir, onClick }) => (
+const HeaderBtn: React.FC<{ label: string; active: boolean; dir: 'asc' | 'desc'; onClick: () => void; padLeft?: boolean }> = ({ label, active, dir, onClick, padLeft }) => (
   <button
     onClick={onClick}
-    className={`px-2 text-left inline-flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-[0.14em] transition-colors ${active ? 'text-indigo-300' : 'text-slate-500 hover:text-slate-300'}`}
+    className={`${padLeft ? 'pl-5 pr-2' : 'px-2'} text-left inline-flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-[0.14em] transition-colors ${active ? 'text-indigo-300' : 'text-slate-500 hover:text-slate-300'}`}
   >
     <span>{label}</span>
     <span className={`text-[9px] ${active ? 'opacity-100' : 'opacity-40'}`} aria-hidden="true">{active ? (dir === 'asc' ? '▲' : '▼') : '↕'}</span>
@@ -735,69 +767,73 @@ const LeadsTable: React.FC<{ scope: LeadsScope; onLogout: () => void }> = ({ sco
         )}
 
         {/* ── TABLE view ─────────────────────────────────────────────────── */}
-        {/* The data lives in a bordered box on the LEFT. The PDF buttons live in
-            a separate gutter on the RIGHT — genuinely OUTSIDE the table box —
-            with matched fixed row heights so each button lines up with its row. */}
+        {/* Full-width table box (never shrunk). The PDF button is positioned
+            absolutely OUTSIDE the box's right edge and revealed on row hover —
+            it lives in the page margin, so it costs the table no width. */}
         {layout === 'table' && (
-          <div className="flex items-start gap-3">
-            {/* LEFT: the table box (data only) */}
-            <div className="flex-1 min-w-0 rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)' }}>
-              {/* Header */}
-              <div className="px-3 sm:px-4 flex items-center" style={{ height: HEADER_H, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-                <div className="flex-1" style={ROW_GRID}>
-                  <HeaderBtn label="Date"    active={custom && sortKey === 'subscribedAt'} dir={sortDir} onClick={() => toggleSort('subscribedAt')} />
-                  <HeaderBtn label="Name"    active={custom && sortKey === 'name'}         dir={sortDir} onClick={() => toggleSort('name')} />
-                  <div className={HEAD_CLS}>Email</div>
-                  <HeaderBtn label="Tier"    active={custom && sortKey === 'tier'}         dir={sortDir} onClick={() => toggleSort('tier')} />
-                  <HeaderBtn label="Score"   active={custom && sortKey === 'pct'}          dir={sortDir} onClick={() => toggleSort('pct')} />
-                  <div className={HEAD_CLS}>Source</div>
-                  <HeaderBtn label="Company" active={custom && sortKey === 'company'}      dir={sortDir} onClick={() => toggleSort('company')} />
-                  <div className={HEAD_CLS}>Industry</div>
-                </div>
+          <div
+            className="rounded-2xl"
+            style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)' }}
+          >
+            {/* Header */}
+            <div className="px-3 sm:px-4 flex items-center" style={{ height: HEADER_H, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+              <div className="flex-1" style={ROW_GRID}>
+                <HeaderBtn label="Date"    active={custom && sortKey === 'subscribedAt'} dir={sortDir} onClick={() => toggleSort('subscribedAt')} />
+                <HeaderBtn label="Name"    active={custom && sortKey === 'name'}         dir={sortDir} onClick={() => toggleSort('name')} />
+                <div className={HEAD_CLS}>Email</div>
+                <HeaderBtn label="Tier"    active={custom && sortKey === 'tier'}         dir={sortDir} onClick={() => toggleSort('tier')} />
+                <HeaderBtn label="Score"   active={custom && sortKey === 'pct'} padLeft   dir={sortDir} onClick={() => toggleSort('pct')} />
+                <div className={HEAD_CLS}>Source</div>
+                <HeaderBtn label="Company" active={custom && sortKey === 'company'}      dir={sortDir} onClick={() => toggleSort('company')} />
+                <div className={HEAD_CLS}>Industry</div>
               </div>
-
-              {(!loading && filtered.length === 0) ? (
-                <div className="px-4 py-12 text-center text-slate-500 text-[13px]">
-                  {leads.length === 0 ? 'No leads yet.' : 'No leads match those filters.'}
-                </div>
-              ) : (
-                filtered.map(lead => (
-                  <div
-                    key={lead.id}
-                    onClick={() => setSelected(lead)}
-                    className="px-3 sm:px-4 flex items-center cursor-pointer transition-colors hover:bg-white/[0.03] text-[13px]"
-                    style={{ height: ROW_H, borderBottom: '1px solid rgba(255,255,255,0.04)' }}
-                  >
-                    <div className="flex-1" style={ROW_GRID}>
-                      <div className="px-2 text-slate-400 tabular whitespace-nowrap text-[12.5px]">
-                        {lead.subscribedAt ? new Date(lead.subscribedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' }) : '—'}
-                      </div>
-                      <div className="px-2 min-w-0 flex items-center gap-2">
-                        <span className="truncate text-white font-medium">{lead.name || '—'}</span>
-                        {isTestLead(lead) && <TestBadge />}
-                      </div>
-                      <div className="px-2 min-w-0"><span className="block truncate text-slate-400">{lead.email}</span></div>
-                      <div className="px-2"><TierPill tier={lead.tier} /></div>
-                      <div className="px-2 tabular text-white text-[12.5px]">{lead.pct ? `${lead.pct}%` : '—'}</div>
-                      <div className="px-2"><SourcePill edition={lead.edition} /></div>
-                      <div className="px-2 min-w-0"><span className="block truncate text-slate-300">{lead.company || '—'}</span></div>
-                      <div className="px-2 min-w-0"><span className="block truncate text-slate-400">{lead.industry || '—'}</span></div>
-                    </div>
-                  </div>
-                ))
-              )}
             </div>
 
-            {/* RIGHT: PDF button gutter, OUTSIDE the table box */}
-            {!(!loading && filtered.length === 0) && (
-              <div className="flex-shrink-0">
-                <div style={{ height: HEADER_H }} />
-                {filtered.map(lead => (
-                  <div key={lead.id} className="flex items-center" style={{ height: ROW_H }}>
+            {(!loading && filtered.length === 0) ? (
+              <div className="px-4 py-12 text-center text-slate-500 text-[13px]">
+                {leads.length === 0 ? 'No leads yet.' : 'No leads match those filters.'}
+              </div>
+            ) : (
+              filtered.map(lead => (
+                <div
+                  key={lead.id}
+                  onClick={() => setSelected(lead)}
+                  className="lead-row relative px-3 sm:px-4 flex items-center cursor-pointer transition-colors hover:bg-white/[0.03] text-[13px]"
+                  style={{ height: ROW_H, borderBottom: '1px solid rgba(255,255,255,0.04)' }}
+                >
+                  <div className="flex-1" style={ROW_GRID}>
+                    <div className="px-2 text-slate-400 tabular whitespace-nowrap text-[12.5px]">
+                      {lead.subscribedAt ? new Date(lead.subscribedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' }) : '—'}
+                    </div>
+                    <div className="lead-cell px-2 min-w-0 flex items-center gap-2">
+                      <span className="truncate text-white font-medium">{lead.name || '—'}</span>
+                      {isTestLead(lead) && <TestBadge />}
+                      <CopyBtn value={lead.name} />
+                    </div>
+                    <div className="lead-cell px-2 min-w-0 flex items-center gap-1.5">
+                      <span className="truncate text-slate-400">{lead.email}</span>
+                      <CopyBtn value={lead.email} />
+                    </div>
+                    <div className="px-2"><TierPill tier={lead.tier} /></div>
+                    <div className="pl-5 pr-2 tabular text-white text-[12.5px]">{lead.pct ? `${lead.pct}%` : '—'}</div>
+                    <div className="px-2"><SourcePill edition={lead.edition} /></div>
+                    <div className="lead-cell px-2 min-w-0 flex items-center gap-1.5">
+                      <span className="truncate text-slate-300">{lead.company || '—'}</span>
+                      <CopyBtn value={lead.company} />
+                    </div>
+                    <div className="lead-cell px-2 min-w-0 flex items-center gap-1.5">
+                      <span className="truncate text-slate-400">{lead.industry || '—'}</span>
+                      <CopyBtn value={lead.industry} />
+                    </div>
+                  </div>
+
+                  {/* PDF — outside the table's right edge, revealed on row hover.
+                      pl-3 bridges the gap so the mouse can travel to it. */}
+                  <div className="lead-pdf absolute top-0 h-full flex items-center pl-3" style={{ left: '100%' }}>
                     <PdfButton url={lead.pdfUrl} />
                   </div>
-                ))}
-              </div>
+                </div>
+              ))
             )}
           </div>
         )}
