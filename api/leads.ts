@@ -88,6 +88,19 @@ function parseCookies(header: string | undefined): Record<string, string> {
   }
   return out;
 }
+// Server-to-server bypass: a caller presenting the shared LEADS_API_TOKEN in
+// the X-Leads-Token header gets 'all' scope without a password/cookie. Used by
+// the Motherboard dashboard's server-side proxy so the token never reaches a
+// browser. No-op unless LEADS_API_TOKEN is configured.
+function tokenScope(req: VercelRequest): Scope | null {
+  const configured = process.env.LEADS_API_TOKEN?.trim();
+  if (!configured) return null;
+  const raw = req.headers['x-leads-token'];
+  const presented = (Array.isArray(raw) ? raw[0] : raw)?.trim();
+  if (presented && timingSafeStringEqual(presented, configured)) return 'all';
+  return null;
+}
+
 // Returns the authed scope from the cookie, or null if not signed in.
 function authedScope(req: VercelRequest): Scope | null {
   const token = parseCookies(req.headers.cookie)[COOKIE_NAME];
@@ -298,8 +311,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed.' });
 
-  // GET requires the session cookie; the scope determines what's visible.
-  const scope = authedScope(req);
+  // GET is authorised by the shared server-to-server token OR the session
+  // cookie; the resulting scope determines what's visible.
+  const scope = tokenScope(req) || authedScope(req);
   if (!scope) return res.status(401).json({ error: 'Not signed in.' });
 
   const apiKey = process.env.MAILERLITE_API_KEY;
