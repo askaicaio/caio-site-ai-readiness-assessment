@@ -50,12 +50,31 @@ function isAuthed(req: VercelRequest): boolean {
   return timingSafeStringEqual(presented, configured);
 }
 
+// Coerce a value to a clean string WITHOUT ever producing "[object Object]".
+// GHL sometimes sends a merge field (e.g. {{appointment.title}}) as an object
+// — during a Test run there's no real appointment, so it resolves to a struct.
+// For objects we dig for a sensible label; otherwise we treat it as empty.
+function asStr(v: unknown): string {
+  if (v == null) return '';
+  if (typeof v === 'string') return v.trim();
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v).trim();
+  if (typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    for (const k of ['name', 'title', 'value', 'label']) {
+      const s = o[k];
+      if (typeof s === 'string' && s.trim()) return s.trim();
+    }
+    return '';
+  }
+  return '';
+}
+
 // GHL payload shapes vary by how the webhook action is configured, so pull each
 // value from a permissive set of likely keys (flat or lightly nested).
 function pick(obj: Record<string, unknown>, keys: string[]): string {
   for (const k of keys) {
-    const v = obj[k];
-    if (v != null && String(v).trim() !== '') return String(v).trim();
+    const s = asStr(obj[k]);
+    if (s) return s;
   }
   return '';
 }

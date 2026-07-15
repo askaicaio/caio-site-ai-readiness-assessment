@@ -870,7 +870,6 @@ const LeadsTable: React.FC<{ scope: LeadsScope; onLogout: () => void }> = ({ sco
                     </div>
                     <div className="lead-cell px-2 min-w-0 flex items-center gap-2">
                       <span className="truncate text-white font-medium">{lead.name || '—'}</span>
-                      {lead.bookedCall && <BookedBadge lead={lead} />}
                       {isTestLead(lead) && <TestBadge />}
                       <CopyBtn value={lead.name} />
                     </div>
@@ -890,6 +889,14 @@ const LeadsTable: React.FC<{ scope: LeadsScope; onLogout: () => void }> = ({ sco
                       <CopyBtn value={lead.industry} />
                     </div>
                   </div>
+
+                  {/* Booked — outside the table's LEFT edge, ALWAYS visible (it's
+                      a hot signal), so it never truncates the name column. */}
+                  {lead.bookedCall && (
+                    <div className="absolute top-0 h-full flex items-center pr-3" style={{ right: '100%' }}>
+                      <BookedBadge lead={lead} />
+                    </div>
+                  )}
 
                   {/* PDF — outside the table's right edge, revealed on row hover.
                       pl-3 bridges the gap so the mouse can travel to it. */}

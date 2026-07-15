@@ -287,13 +287,16 @@ async function fetchBookings(): Promise<Map<string, BookingState>> {
   } catch (err) {
     console.error('[leads] bookings list error:', err);
   }
+  // Guard against legacy records that stored "[object Object]" (from a GHL
+  // merge field that resolved to a struct before the endpoint sanitised it).
+  const clean = (s?: string): string => (s && s !== '[object Object]' ? s : '');
   const out = new Map<string, BookingState>();
   for (const [email, rec] of latest) {
     out.set(email, {
       booked: rec.booked !== false, // default true unless explicitly cancelled
-      bookedAt: rec.bookedAt || rec.receivedAt || '',
-      calendar: rec.calendar || '',
-      source: rec.source || '',
+      bookedAt: clean(rec.bookedAt) || rec.receivedAt || '',
+      calendar: clean(rec.calendar),
+      source: clean(rec.source),
     });
   }
   return out;
