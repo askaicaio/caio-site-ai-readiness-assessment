@@ -27,6 +27,7 @@ interface Lead {
   bookedCall?: boolean;
   bookedAt?: string;
   bookedCalendar?: string;
+  bookedSource?: string;
 }
 
 // Human labels for the source/edition. edition maps 1:1 to which link the
@@ -321,6 +322,7 @@ const LeadModal: React.FC<{ lead: Lead; onClose: () => void }> = ({ lead, onClos
                 <span className="text-emerald-300">
                   Yes{lead.bookedCalendar ? ` · ${lead.bookedCalendar}` : ''}
                   {lead.bookedAt && !isNaN(new Date(lead.bookedAt).getTime()) ? ` · ${new Date(lead.bookedAt).toLocaleString()}` : ''}
+                  {lead.bookedSource ? ` · via ${lead.bookedSource}` : ''}
                 </span>
               ) : ''}
             </Field>
@@ -486,6 +488,7 @@ const CSV_COLUMNS: Array<{ label: string; get: (l: Lead) => string }> = [
   { label: 'Booked Call',         get: l => (l.bookedCall ? 'Yes' : '') },
   { label: 'Booked Calendar',     get: l => l.bookedCalendar || '' },
   { label: 'Booked At',           get: l => l.bookedAt || '' },
+  { label: 'Booked Source',       get: l => l.bookedSource || '' },
   { label: 'Company',             get: l => l.company },
   { label: 'Role',                get: l => l.role },
   { label: 'Industry',            get: l => l.industry },

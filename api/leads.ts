@@ -149,6 +149,7 @@ interface Lead {
   bookedCall: boolean;
   bookedAt: string;
   bookedCalendar: string;
+  bookedSource: string;
 }
 
 function toLead(s: MlSubscriber): Lead {
@@ -177,7 +178,7 @@ function toLead(s: MlSubscriber): Lead {
     utmSource: '', utmCampaign: '', referer: '',
     primaryGoal: '', biggestChallenge: '', aiTools: '',
     answers: [],
-    bookedCall: false, bookedAt: '', bookedCalendar: '',
+    bookedCall: false, bookedAt: '', bookedCalendar: '', bookedSource: '',
   };
 }
 
@@ -245,7 +246,7 @@ function recordToLead(rec: LeadRecord): Lead {
     biggestChallenge: rec.biggestChallenge || '',
     aiTools: rec.aiTools || '',
     answers: Array.isArray(rec.answers) ? rec.answers : [],
-    bookedCall: false, bookedAt: '', bookedCalendar: '',
+    bookedCall: false, bookedAt: '', bookedCalendar: '', bookedSource: '',
   };
 }
 
@@ -258,10 +259,11 @@ interface BookingRecord {
   bookedAt?: string;
   calendar?: string;
   status?: string;
+  source?: string;
   booked?: boolean;
   receivedAt?: string;
 }
-interface BookingState { booked: boolean; bookedAt: string; calendar: string }
+interface BookingState { booked: boolean; bookedAt: string; calendar: string; source: string }
 
 async function fetchBookings(): Promise<Map<string, BookingState>> {
   const latest = new Map<string, BookingRecord>();
@@ -291,6 +293,7 @@ async function fetchBookings(): Promise<Map<string, BookingState>> {
       booked: rec.booked !== false, // default true unless explicitly cancelled
       bookedAt: rec.bookedAt || rec.receivedAt || '',
       calendar: rec.calendar || '',
+      source: rec.source || '',
     });
   }
   return out;
@@ -434,6 +437,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         l.bookedCall = true;
         l.bookedAt = b.bookedAt;
         l.bookedCalendar = b.calendar;
+        l.bookedSource = b.source;
       }
     }
 

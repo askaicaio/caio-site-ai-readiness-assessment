@@ -112,6 +112,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     pick(appt, ['status', 'appointmentStatus'])
   ).toLowerCase();
 
+  // GHL contact source (which link/form/tag they came in on) — extra
+  // attribution context, sent as a custom {{contact.source}} pair.
+  const source =
+    pick(body, ['source', 'contactSource', 'contact_source']) ||
+    pick(contact, ['source', 'contact_source']);
+
   const booked = !CANCELLED_STATUSES.has(status);
 
   const record = {
@@ -119,6 +125,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     bookedAt,
     calendar,
     status,
+    source,
     booked,
     receivedAt: new Date().toISOString(),
   };
