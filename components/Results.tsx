@@ -210,6 +210,12 @@ const selectCls =
   // chevron — light slate, embedded inline so we don't need an asset
   `bg-[url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")]`;
 
+// A pragmatic email check: requires x@y.z with a real TLD (2+ chars). Native
+// `type="email"` accepts "name@gmailcom" (no dot) — this catches that class of
+// typo before we generate a report that can never be delivered.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const isValidEmail = (v: string): boolean => EMAIL_RE.test(v.trim());
+
 // ─── Generating-state indicator ──────────────────────────────────────────────
 // Per Josh's feedback: we DO NOT stream the report to the page in real time.
 // Watching the model write feels less premium than seeing a polished, finished
@@ -298,9 +304,21 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
   const percentage = maxScore > 0 ? (score / maxScore) * 100 : 0;
   const { tier, accent, accentSoft, description } = getTierConfig(percentage);
 
+  // Form validity — a valid submission needs a name and a well-formed email.
+  const emailValid = isValidEmail(email);
+  const canSubmit = name.trim().length > 0 && emailValid;
+  // Only nag once they've typed something in the email field.
+  const showEmailError = email.trim().length > 0 && !emailValid;
+
   const handleUnlockReport = async (evt: React.FormEvent) => {
     evt.preventDefault();
-    if (!name || !email) return;
+    const cleanName = name.trim();
+    const cleanEmail = email.trim();
+    if (!cleanName) { setError('Please enter your name.'); return; }
+    if (!isValidEmail(cleanEmail)) { setError('Please enter a valid email address (e.g. jane@acmecorp.com).'); return; }
+    // Normalise the stored values so the confirmation + the record are clean.
+    if (cleanName !== name) setName(cleanName);
+    if (cleanEmail !== email) setEmail(cleanEmail);
 
     setPhase('generating');
     setError('');
@@ -311,7 +329,7 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
     // Identify the user in PostHog and fire form-submit event before we kick
     // off the long-running report generation, so the event lands even if the
     // user navigates away while it streams.
-    identify(email, { name, company, role, industry, companySize, source });
+    identify(cleanEmail, { name: cleanName, company, role, industry, companySize, source });
     track('quiz_form_submitted', {
       source, tier, score, maxScore,
       hasCompany: !!company, hasRole: !!role, hasIndustry: !!industry,
@@ -353,7 +371,7 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name, email, score, maxScore, fullReport,
+          name: cleanName, email: cleanEmail, score, maxScore, fullReport,
           company, role, industry, companySize,
           // Forward attribution captured on entry (utm_source, utm_campaign, etc).
           // Surfaces on the GHL contact + motherboard campaign so we can tell
@@ -489,13 +507,21 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
             <FieldLabel htmlFor="email" required>Work Email</FieldLabel>
             <input
               type="email" id="email" name="email" autoComplete="email" required
+              inputMode="email"
+              aria-invalid={showEmailError}
               value={email} onChange={e => setEmail(e.target.value)}
-              className={inputCls} placeholder="jane@acmecorp.com"
+              className={`${inputCls}${showEmailError ? ' ring-1 ring-rose-400/60 border-rose-400/60' : ''}`}
+              placeholder="jane@acmecorp.com"
             />
+            {showEmailError && (
+              <p className="text-[12.5px] text-rose-300 !mt-1.5">
+                Please enter a valid email address (e.g. jane@acmecorp.com).
+              </p>
+            )}
 
             <button
               type="submit"
-              disabled={!name || !email}
+              disabled={!canSubmit}
               className="btn-primary w-full mt-1"
             >
               Generate My Report
@@ -608,7 +634,7 @@ export const Results: React.FC<ResultsProps> = ({ score, maxScore, answers, onRe
             <div className="pt-2">
               <button
                 type="submit"
-                disabled={!name || !email}
+                disabled={!canSubmit}
                 className="btn-primary w-full"
               >
                 Generate My Personalised Report

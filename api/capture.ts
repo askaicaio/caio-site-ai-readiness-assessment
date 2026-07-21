@@ -764,11 +764,16 @@ function buildTagsFor(tier: string, attribution?: Attribution): string[] {
 }
 
 // ─── Handler ─────────────────────────────────────────────────────────────────
+// Mirror of the client-side check (components/Results.tsx): x@y.z with a real
+// TLD. Server-side guard so a malformed email can't create a lead / MailerLite
+// subscriber / GHL contact even if the form is bypassed.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).end();
 
   const {
-    name, email, score, maxScore, fullReport,
+    name: rawName, email: rawEmail, score, maxScore, fullReport,
     company, role, industry, companySize,
     attribution,
     source,
@@ -797,7 +802,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   };
   const isScalingUp = source === 'scaling-up';
 
-  if (!name || !email) return res.status(400).json({ error: 'Name and email required' });
+  // Normalise once so every downstream consumer (PDF, MailerLite, GHL, Blob)
+  // gets the trimmed values.
+  const name = (rawName || '').trim();
+  const email = (rawEmail || '').trim();
+
+  if (!name) return res.status(400).json({ error: 'Name is required' });
+  if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'A valid email address is required' });
 
   const pct       = Math.round((score / maxScore) * 100);
   const tier      = pct > 75 ? 'Leader' : pct > 40 ? 'Adopter' : 'Explorer';
