@@ -31,6 +31,11 @@ import { list } from '@vercel/blob';
 
 export const config = { maxDuration: 30 };
 
+// Structurally-valid email (x@y.z, 2+ char TLD) — mirrors the capture form +
+// api/capture guard. Used to drop undeliverable legacy junk from the portals
+// (e.g. "name@gmailcom" typos captured before validation existed).
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
 // Two portals share this endpoint, scoped by which password was used:
 //   'scaling-up' → Scaling Up team. Sees ONLY edition === 'scaling-up' leads.
 //   'all'        → CAIO team. Sees every lead.
@@ -444,12 +449,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    // Drop structurally-invalid emails — undeliverable legacy junk from before
+    // capture-time validation existed. No real lead is affected (their emails
+    // are valid by construction now).
+    const deliverable = leads.filter(l => EMAIL_RE.test((l.email || '').trim()));
+
     // Scope isolation: the Scaling Up portal only ever receives scaling-up
     // leads — CAIO / unknown-edition leads never leave the server for that
     // scope. The CAIO ('all') portal receives everything.
     const scoped = scope === 'scaling-up'
-      ? leads.filter(l => l.edition === 'scaling-up')
-      : leads;
+      ? deliverable.filter(l => l.edition === 'scaling-up')
+      : deliverable;
 
     scoped.sort((a, b) => (a.subscribedAt < b.subscribedAt ? 1 : -1));
     return res.status(200).json({ leads: scoped, count: scoped.length, scope, fetchedAt: new Date().toISOString() });
