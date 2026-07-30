@@ -17,6 +17,13 @@ export interface Attribution {
   utmTerm?: string;
   referer?: string;
   capturedAt?: string;
+  /**
+   * Affiliate/partner referral code — read from ?aff_id (the param the CAIO
+   * affiliate redirector /r appends), falling back to ?utm_content (which the
+   * same redirect also sets). Persisted through the quiz so a completed lead
+   * can be credited to the affiliate.
+   */
+  affiliateCode?: string;
 }
 
 /**
@@ -37,13 +44,17 @@ export function captureAttributionFromUrl(): Attribution {
   fresh.utmContent = get("utm_content");
   fresh.utmTerm = get("utm_term");
   fresh.referer = document.referrer || undefined;
+  // Affiliate code: prefer the explicit ?aff_id, fall back to ?utm_content
+  // (the CAIO /r redirect sets both).
+  fresh.affiliateCode = get("aff_id") || get("utm_content");
 
   const hasFresh = !!(
     fresh.utmSource ||
     fresh.utmMedium ||
     fresh.utmCampaign ||
     fresh.utmContent ||
-    fresh.utmTerm
+    fresh.utmTerm ||
+    fresh.affiliateCode
   );
 
   if (hasFresh) {

@@ -549,6 +549,7 @@ async function addToMailerLite(
   extras: {
     company?: string; role?: string; industry?: string; companySize?: string;
     tier?: string; pct?: number; edition?: 'caio' | 'scaling-up';
+    affiliateCode?: string;
   },
 ) {
   const apiKey = process.env.MAILERLITE_API_KEY;
@@ -577,6 +578,10 @@ async function addToMailerLite(
   if (extras.tier)          fields.tier         = extras.tier;
   if (extras.pct != null)   fields.pct          = String(extras.pct);
   if (extras.edition)       fields.edition      = extras.edition;
+  // Affiliate referral code. NOTE: the `affiliate_code` custom field must exist
+  // in the MailerLite account — if it doesn't, MailerLite returns 422 and the
+  // name-only retry above drops ALL fields for that subscriber. Pre-create it.
+  if (extras.affiliateCode) fields.affiliate_code = extras.affiliateCode;
 
   // ── Step 1: Create or update the subscriber ─────────────────────────────
   const SUB_URL = 'https://connect.mailerlite.com/api/subscribers';
@@ -677,6 +682,7 @@ async function pingMotherboardCompletion(payload: {
         utm_content:  payload.attribution?.utmContent,
         utm_term:     payload.attribution?.utmTerm,
         referer:      payload.attribution?.referer,
+        affiliate_code: payload.attribution?.affiliateCode,
         capturedAt:   new Date().toISOString(),
       }),
     });
@@ -688,6 +694,53 @@ async function pingMotherboardCompletion(payload: {
     }
   } catch (err) {
     console.error('[MB] ping threw:', err);
+  }
+}
+
+// ─── Motherboard affiliate quiz-lead webhook ────────────────────────────────
+// When a quiz lead carries an affiliate code, POST it to motherboard's partner
+// quiz-lead endpoint so the lead is attributed to the affiliate (a later
+// self-serve purchase then credits them via email-match). Distinct from the
+// completion ping above (which is the campaign webhook). No-ops unless there's
+// both an affiliate code AND the shared leads token — so it's safe to ship
+// before motherboard/env are wired. Auth mirrors the read-side leads proxy:
+// the X-Leads-Token header carrying LEADS_API_TOKEN (== motherboard's
+// ASSESSMENT_LEADS_TOKEN).
+async function postAffiliateQuizLead(payload: {
+  email: string; name: string; company?: string;
+  affiliateCode?: string; edition: 'caio' | 'scaling-up'; submittedAt: string;
+}) {
+  const code = payload.affiliateCode?.trim();
+  if (!code) return; // nothing to attribute
+  const token = process.env.LEADS_API_TOKEN?.trim();
+  if (!token) {
+    console.log('[MB affiliate] LEADS_API_TOKEN not set — skipping quiz-lead post.');
+    return;
+  }
+  const url =
+    process.env.MOTHERBOARD_QUIZLEAD_WEBHOOK_URL?.trim().replace(/\/$/, '') ||
+    'https://motherboard.chiefaiofficer.com/api/partners/webhooks/quiz-lead';
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Leads-Token': token },
+      body: JSON.stringify({
+        email: payload.email,
+        name: payload.name,
+        company: payload.company || undefined,
+        affiliateCode: code,
+        edition: payload.edition,
+        submittedAt: payload.submittedAt,
+      }),
+    });
+    if (res.ok) {
+      console.log(`[MB affiliate] ✓ quiz-lead attributed to ${code} for ${payload.email}`);
+    } else {
+      const body = await res.text();
+      console.error(`[MB affiliate] ${res.status}:`, body.slice(0, 300));
+    }
+  } catch (err) {
+    console.error('[MB affiliate] post threw:', err);
   }
 }
 
@@ -722,6 +775,8 @@ interface Attribution {
   utmTerm?: string;
   referer?: string;
   capturedAt?: string;
+  /** Affiliate/partner referral code (from ?aff_id, fallback ?utm_content). */
+  affiliateCode?: string;
 }
 
 /** Convert a string into a GHL-safe tag fragment: lowercase, kebab-case, alphanumeric. */
@@ -862,6 +917,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       utmContent:  attribution?.utmContent   || '',
       utmTerm:     attribution?.utmTerm       || '',
       referer:     attribution?.referer       || '',
+      affiliateCode: attribution?.affiliateCode || '',
       primaryGoal: primaryGoal || '',
       biggestChallenge: biggestChallenge || '',
       aiTools: aiTools || '',
@@ -940,6 +996,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const emailSide: Promise<unknown> = addToMailerLite(email, name, pdfUrl, {
     company, role, industry, companySize,
     tier, pct, edition: isScalingUp ? 'scaling-up' : 'caio',
+    affiliateCode: attribution?.affiliateCode,
   });
 
   // Server-side completion ping to motherboard for live monitoring (both
@@ -951,7 +1008,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     score, maxScore, pct, tier, pdfUrl, attribution,
   });
 
-  await Promise.allSettled([ghlPost, emailSide, motherboardPing]);
+  // Attribute the lead to an affiliate in motherboard when a referral code
+  // rode in (no-ops otherwise). Separate from the campaign completion ping.
+  const affiliatePost = postAffiliateQuizLead({
+    name, email, company,
+    affiliateCode: attribution?.affiliateCode,
+    edition: isScalingUp ? 'scaling-up' : 'caio',
+    submittedAt: new Date().toISOString(),
+  });
+
+  await Promise.allSettled([ghlPost, emailSide, motherboardPing, affiliatePost]);
 
   return res.status(200).json({ success: true, pdfUrl });
 }

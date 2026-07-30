@@ -17,6 +17,7 @@ interface Lead {
   pdfUrl: string;
   edition: string;
   groups: string[];
+  affiliateCode?: string;
   utmSource?: string;
   utmCampaign?: string;
   referer?: string;
@@ -329,10 +330,16 @@ const LeadModal: React.FC<{ lead: Lead; onClose: () => void }> = ({ lead, onClos
           </div>
 
           {/* Attribution — only when we have it */}
-          {utm && (
+          {(utm || lead.affiliateCode) && (
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 mb-2">Campaign attribution</div>
-              <div className="text-[13px] text-slate-300 font-mono break-all">{utm}</div>
+              {lead.affiliateCode && (
+                <div className="text-[13px] mb-1.5">
+                  <span className="text-slate-500">Affiliate referral: </span>
+                  <span className="text-indigo-300 font-mono">{lead.affiliateCode}</span>
+                </div>
+              )}
+              {utm && <div className="text-[13px] text-slate-300 font-mono break-all">{utm}</div>}
             </div>
           )}
 
@@ -493,6 +500,7 @@ const CSV_COLUMNS: Array<{ label: string; get: (l: Lead) => string }> = [
   { label: 'Role',                get: l => l.role },
   { label: 'Industry',            get: l => l.industry },
   { label: 'Company Size',        get: l => l.companySize },
+  { label: 'Affiliate Code',      get: l => l.affiliateCode || '' },
   { label: 'UTM Source',          get: l => l.utmSource || '' },
   { label: 'UTM Campaign',        get: l => l.utmCampaign || '' },
   { label: 'Primary Goals',       get: l => l.primaryGoal || '' },
@@ -544,12 +552,12 @@ const VIEW_MODES: Array<{ key: ViewMode; label: string }> = [
 ];
 
 // Shared grid template so the table header + each row's data area line up.
-// 8 data columns; the PDF button lives OUTSIDE this grid, to the right of
+// 9 data columns; the PDF button lives OUTSIDE this grid, to the right of
 // each row (see the render), so it's always visible without scrolling.
 const ROW_GRID: React.CSSProperties = {
   display: 'grid',
   gridTemplateColumns:
-    '96px minmax(110px,1.4fr) minmax(150px,1.7fr) 84px 60px 104px minmax(100px,1.2fr) minmax(90px,1fr)',
+    '96px minmax(110px,1.4fr) minmax(150px,1.7fr) 84px 60px 104px minmax(100px,1.2fr) minmax(90px,1fr) minmax(84px,0.9fr)',
   alignItems: 'center',
 };
 // Fixed row heights so the PDF button gutter (rendered OUTSIDE the table box)
@@ -849,6 +857,7 @@ const LeadsTable: React.FC<{ scope: LeadsScope; onLogout: () => void }> = ({ sco
                 <div className={HEAD_CLS}>Source</div>
                 <HeaderBtn label="Company" active={custom && sortKey === 'company'}      dir={sortDir} onClick={() => toggleSort('company')} />
                 <div className={HEAD_CLS}>Industry</div>
+                <div className={HEAD_CLS}>Affiliate</div>
               </div>
             </div>
 
@@ -887,6 +896,16 @@ const LeadsTable: React.FC<{ scope: LeadsScope; onLogout: () => void }> = ({ sco
                     <div className="lead-cell px-2 min-w-0 flex items-center gap-1.5">
                       <span className="truncate text-slate-400">{lead.industry || '—'}</span>
                       <CopyBtn value={lead.industry} />
+                    </div>
+                    <div className="lead-cell px-2 min-w-0 flex items-center gap-1.5">
+                      {lead.affiliateCode ? (
+                        <>
+                          <span className="truncate font-mono text-[12px] text-indigo-300">{lead.affiliateCode}</span>
+                          <CopyBtn value={lead.affiliateCode} />
+                        </>
+                      ) : (
+                        <span className="text-slate-600">—</span>
+                      )}
                     </div>
                   </div>
 
