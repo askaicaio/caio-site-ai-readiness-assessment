@@ -454,12 +454,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // are valid by construction now).
     const deliverable = leads.filter(l => EMAIL_RE.test((l.email || '').trim()));
 
+    // A booking is annotation-only. The GHL booking automation is shared across
+    // funnels, so it fires for people who booked a call WITHOUT ever taking the
+    // assessment. We still record their booking, but such a person must never
+    // surface as a "lead" here. So a booked row is shown only if it also has an
+    // assessment footprint (a stored answer record, or quiz-derived fields).
+    // This can't hide a real assessment-taker, and leaves non-booked rows as-is.
+    const assessmentEmails = new Set(records.keys());
+    const hasAssessment = (l: Lead): boolean =>
+      assessmentEmails.has(l.email.trim().toLowerCase()) ||
+      !!(l.edition || l.tier || l.pct || (l.answers && l.answers.length));
+    const visible = deliverable.filter(l => !(l.bookedCall && !hasAssessment(l)));
+
     // Scope isolation: the Scaling Up portal only ever receives scaling-up
     // leads — CAIO / unknown-edition leads never leave the server for that
     // scope. The CAIO ('all') portal receives everything.
     const scoped = scope === 'scaling-up'
-      ? deliverable.filter(l => l.edition === 'scaling-up')
-      : deliverable;
+      ? visible.filter(l => l.edition === 'scaling-up')
+      : visible;
 
     scoped.sort((a, b) => (a.subscribedAt < b.subscribedAt ? 1 : -1));
     return res.status(200).json({ leads: scoped, count: scoped.length, scope, fetchedAt: new Date().toISOString() });
