@@ -47,12 +47,15 @@ function sectionAccent(title: string): string {
   return INDIGO;
 }
 
-function getLogoSrc(): string {
+// The co-branded lockup (logo.png) is reserved for the Scaling Up partner
+// edition. Every other report carries the ChiefAIOfficer.com logo on its own.
+function getLogoSrc(coBranded: boolean): string {
+  const file = coBranded ? 'logo.png' : 'logo-caio.png';
   try {
-    const p = path.join(process.cwd(), 'public', 'logo.png');
+    const p = path.join(process.cwd(), 'public', file);
     if (fs.existsSync(p)) return `data:image/png;base64,${fs.readFileSync(p).toString('base64')}`;
   } catch { /* fall through */ }
-  return 'https://assessment.chiefaiofficer.com/logo.png';
+  return `https://assessment.chiefaiofficer.com/${file}`;
 }
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
@@ -815,7 +818,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const tierColor = tier === 'Leader' ? '#16a34a' : tier === 'Adopter' ? '#2563eb' : '#d97706';
   const date      = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   const sections  = parseReport(fullReport || '');
-  const logoSrc   = getLogoSrc();
+  const logoSrc   = getLogoSrc(isScalingUp);
 
   // Branded slug shared by the PDF and the JSON sidecar.
   const titleName = name.trim().replace(/\s+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).replace(/\s+/g, '-').replace(/[^A-Za-z0-9-]/g, '');

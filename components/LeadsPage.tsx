@@ -423,8 +423,8 @@ const LoginScreen: React.FC<{ scope: LeadsScope; onSuccess: () => void }> = ({ s
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <img
-            src="/logo.png"
-            alt="ChiefAIOfficer.com in partnership with Scaling Up"
+            src={isAll ? '/logo-caio.png' : '/logo.png'}
+            alt={isAll ? 'ChiefAIOfficer.com' : 'ChiefAIOfficer.com in partnership with Scaling Up'}
             className="mx-auto mb-8 h-9 sm:h-10 w-auto opacity-90"
           />
           <span className="kicker text-slate-500">{isAll ? 'ChiefAIOfficer · Restricted' : 'Scaling Up · Restricted'}</span>

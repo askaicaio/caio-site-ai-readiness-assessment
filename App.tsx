@@ -147,9 +147,11 @@ const Quiz: React.FC = () => {
 
   const renderHeader = () => (
     <div className="text-center mb-12 max-w-3xl mx-auto">
+      {/* Co-branded lockup ONLY on the /scaling-up partner edition. The public
+          CAIO assessment carries the ChiefAIOfficer.com logo on its own. */}
       <img
-        src="/logo.png"
-        alt="ChiefAIOfficer.com in partnership with Scaling Up"
+        src={isScalingUp ? '/logo.png' : '/logo-caio.png'}
+        alt={isScalingUp ? 'ChiefAIOfficer.com in partnership with Scaling Up' : 'ChiefAIOfficer.com'}
         className="mx-auto mb-10 h-9 sm:h-10 w-auto opacity-90"
       />
       {isScalingUp && (
