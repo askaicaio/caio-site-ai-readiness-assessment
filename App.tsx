@@ -34,9 +34,25 @@ const isSuLeadsPath = (): boolean =>
 const isCaioLeadsPath = (): boolean =>
   typeof window !== 'undefined' && window.location.pathname.startsWith('/leads');
 
+// Every route gets its own browser-tab title, distinctive part FIRST so it
+// survives truncation in a narrow tab strip. Order matters: /scaling-up-leads
+// must be matched before the /scaling-up quiz (detectSource() prefix-matches
+// both). index.html's <title> is only the pre-JS fallback for the public page.
+const pageTitle = (): string => {
+  if (isReviewPath())     return 'Build Review · AI Readiness Assessment';
+  if (isSalesGuidePath()) return 'Sales Guide · AI Readiness Assessment';
+  if (isSuLeadsPath())    return 'Scaling Up Leads Portal · AI Readiness Assessment';
+  if (isCaioLeadsPath())  return 'CAIO Leads Portal · AI Readiness Assessment';
+  if (detectSource() === 'scaling-up') return 'Scaling Up AI Readiness Assessment | ChiefAIOfficer.com';
+  return 'AI Readiness Assessment | ChiefAIOfficer.com';
+};
+
 // Top-level App branches by path BEFORE any quiz-state hooks run so we
 // don't violate the rules of hooks when an internal-doc path is active.
 const App: React.FC = () => {
+  // Runs before the path branches below so it's unconditional (rules of hooks).
+  useEffect(() => { document.title = pageTitle(); }, []);
+
   if (isReviewPath()) {
     return (
       <div className="min-h-screen">

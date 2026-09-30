@@ -4,7 +4,7 @@
   "framework": "vite",
   "functions": {
     "api/capture.ts": {
-      "includeFiles": "public/logo.png"
+      "includeFiles": "public/logo*.png"
     }
   },
   "rewrites": [
