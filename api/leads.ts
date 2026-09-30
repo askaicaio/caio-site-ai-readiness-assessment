@@ -141,6 +141,9 @@ interface Lead {
   pdfUrl: string;
   edition: string;
   groups: string[];
+  // Affiliate referral code (from the MailerLite affiliate_code field or the
+  // Blob record). Blank for non-referred / pre-tracking leads.
+  affiliateCode: string;
   // Enriched from the Blob lead-record sidecar (blank for pre-tracking leads).
   utmSource: string;
   utmCampaign: string;
@@ -180,6 +183,7 @@ function toLead(s: MlSubscriber): Lead {
     pdfUrl: asStr(fields.pdf_url),
     edition: asStr(fields.edition),
     groups,
+    affiliateCode: asStr(fields.affiliate_code),
     utmSource: '', utmCampaign: '', referer: '',
     primaryGoal: '', biggestChallenge: '', aiTools: '',
     answers: [],
@@ -197,6 +201,7 @@ interface LeadRecord {
   company?: string; role?: string; industry?: string; companySize?: string;
   tier?: string; pct?: number; score?: number; maxScore?: number;
   edition?: string;
+  affiliateCode?: string;
   utmSource?: string; utmCampaign?: string; referer?: string;
   primaryGoal?: string; biggestChallenge?: string; aiTools?: string;
   answers?: QA[];
@@ -244,6 +249,7 @@ function recordToLead(rec: LeadRecord): Lead {
     pdfUrl: rec.pdfUrl || '',
     edition: rec.edition || '',
     groups: [],
+    affiliateCode: rec.affiliateCode || '',
     utmSource: rec.utmSource || '',
     utmCampaign: rec.utmCampaign || '',
     referer: rec.referer || '',
@@ -416,6 +422,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         industry:    l.industry || rec.industry || '',
         companySize: l.companySize || rec.companySize || '',
         pdfUrl:      l.pdfUrl  || rec.pdfUrl  || '',
+        // Blob record is authoritative for the affiliate code; fall back to the
+        // MailerLite field for leads that only exist there.
+        affiliateCode: rec.affiliateCode || l.affiliateCode || '',
         utmSource:   rec.utmSource   || '',
         utmCampaign: rec.utmCampaign || '',
         referer:     rec.referer     || '',
